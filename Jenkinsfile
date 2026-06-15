@@ -57,9 +57,8 @@ ENDSSH
         stage('启动容器') {
             steps {
                 script {
-                    def servedModelName = params.MODEL.tokenize('/')[-1]
-                    def safeModel = servedModelName.replaceAll('\\.', '-').replaceAll('_', '-')
-                    env.SERVED_MODEL_NAME = servedModelName
+                    env.SERVED_MODEL_NAME = params.MODEL.tokenize('/')[-1]
+                    def safeModel = env.SERVED_MODEL_NAME.replaceAll('\\.', '-').replaceAll('_', '-')
                     def containerName = "opencode-validate-${params.CHIP}-${safeModel}-${BUILD_NUMBER}"
                     env.CONTAINER_NAME = containerName
 
@@ -89,13 +88,13 @@ cat > ${params.WORK_DIR}/config/opencode.json << 'CONFIGEOF'
         "apiKey": "{env:API_KEY}"
       },
       "models": {
-        "${servedModelName}": {
-          "name": "${servedModelName}"
+        "${env.SERVED_MODEL_NAME}": {
+          "name": "${env.SERVED_MODEL_NAME}"
         }
       }
     }
   },
-  "model": "custom-openai/${servedModelName}",
+  "model": "custom-openai/${env.SERVED_MODEL_NAME}",
   "autoupdate": false,
   "tools": {
     "webfetch": true,
@@ -143,7 +142,7 @@ echo "=== 列出 opencode 可识别模型 ==="
 docker exec ${containerName} sh -c 'OPENCODE_CONFIG=/workspace/AiAgent-test/config/opencode.json opencode models 2>&1 | head -30'
 
 echo "=== 快速测试 opencode run ==="
-docker exec ${containerName} sh -c 'OPENCODE_CONFIG=/workspace/AiAgent-test/config/opencode.json timeout 60 opencode run "Say hi" --model custom-openai/${servedModelName} --dangerously-skip-permissions 2>&1 || echo "opencode run quick test failed/timed out"'
+docker exec ${containerName} sh -c 'OPENCODE_CONFIG=/workspace/AiAgent-test/config/opencode.json timeout 60 opencode run "Say hi" --model custom-openai/${env.SERVED_MODEL_NAME} --dangerously-skip-permissions 2>&1 || echo "opencode run quick test failed/timed out"'
 
 echo "=== 检查 Python 环境 ==="
 docker exec ${containerName} sh -c "python3 --version || python --version || echo 'Python not found, will install'"
@@ -162,7 +161,7 @@ ENDSSH
             steps {
                 script {
                     def containerName = env.CONTAINER_NAME
-                    def modelName = "custom-openai/${servedModelName}"
+                    def modelName = "custom-openai/${env.SERVED_MODEL_NAME}"
                     def curdate = env.CURDATE
 
                     println("=== 运行 OpenCode 验证脚本 ===")
@@ -213,7 +212,7 @@ ENDSSH
                     catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
                         script {
                             def curdate = env.CURDATE
-                            def resultRelPath = "results/${params.TESTER}/${BUILD_NUMBER}/${params.CHIP}/${servedModelName}/${curdate}"
+                            def resultRelPath = "results/${params.TESTER}/${BUILD_NUMBER}/${params.CHIP}/${env.SERVED_MODEL_NAME}/${curdate}"
 
                             println("=== 打包并拉取测试结果 ===")
                             println("结果路径: ${resultRelPath}")
@@ -242,9 +241,9 @@ ENDSSH
 set -e
 echo "=== 拉取结果到 Jenkins workspace ==="
 rm -rf results
-mkdir -p results/${params.TESTER}/${BUILD_NUMBER}/${params.CHIP}/${servedModelName}
+mkdir -p results/${params.TESTER}/${BUILD_NUMBER}/${params.CHIP}/${env.SERVED_MODEL_NAME}
 
-scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r ${REMOTE_USER}@${REMOTE_HOST}:${params.WORK_DIR}/${resultRelPath} results/${params.TESTER}/${BUILD_NUMBER}/${params.CHIP}/${servedModelName}/
+scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r ${REMOTE_USER}@${REMOTE_HOST}:${params.WORK_DIR}/${resultRelPath} results/${params.TESTER}/${BUILD_NUMBER}/${params.CHIP}/${env.SERVED_MODEL_NAME}/
 
 echo "=== 拉取完成，查看文件 ==="
 find results -type f
@@ -328,7 +327,7 @@ find results -type f
                         println("测试状态: ${testStatus}")
 
                         emailext(
-                            subject: "[模型推理 - OpenCode验证测试报告] #${BUILD_NUMBER} ${params.CHIP} - ${servedModelName} (${testStatus})",
+                            subject: "[模型推理 - OpenCode验证测试报告] #${BUILD_NUMBER} ${params.CHIP} - ${env.SERVED_MODEL_NAME} (${testStatus})",
                             body: emailBody,
                             to: "${params.RECIPIENTS}",
                             mimeType: 'text/html',
@@ -343,7 +342,7 @@ find results -type f
             steps {
                 sshagent(credentials: ["${SSH_CREDENTIALS}"]) {
                     script {
-                        def containerName = env.CONTAINER_NAME ?: "opencode-validate-${params.CHIP}-${servedModelName}-${BUILD_NUMBER}"
+                        def containerName = env.CONTAINER_NAME ?: "opencode-validate-${params.CHIP}-${env.SERVED_MODEL_NAME}-${BUILD_NUMBER}"
                         println("=== 清理容器: ${containerName} ===")
 
                         sh """
