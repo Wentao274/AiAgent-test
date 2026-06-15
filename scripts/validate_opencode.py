@@ -282,6 +282,181 @@ def validate_list_set_output(output):
     }
 
 
+def validate_multi_turn_output(output):
+    """Validate multi-turn dialogue output.
+
+    Prompt asks the model to remember numbers, compute sum, identify primes.
+    Checks:
+    - Model correctly references prior context (the numbers 7, 13, 29)
+    - Provides correct sum (49)
+    - Identifies prime numbers correctly
+    - Output is coherent across turns
+    """
+    issues = []
+    details = {}
+
+    context_keywords = ["7", "13", "29"]
+    found_numbers = [n for n in context_keywords if n in output]
+    details["referenced_numbers"] = found_numbers
+    if len(found_numbers) < 2:
+        issues.append(
+            f"Model did not reference enough prior context numbers (found {len(found_numbers)}: {found_numbers})"
+        )
+
+    has_correct_sum = "49" in output
+    details["correct_sum_49"] = has_correct_sum
+    if not has_correct_sum:
+        issues.append("Model did not provide correct sum (49) of 7+13+29")
+
+    prime_keywords = ["质数", "素数", "prime"]
+    has_prime_mention = any(kw in output for kw in prime_keywords)
+    details["mentions_prime"] = has_prime_mention
+    if not has_prime_mention:
+        issues.append("Model did not mention prime numbers (质数/素数/prime)")
+
+    turn_indicators = [
+        "第",
+        "步骤",
+        "轮",
+        "Step",
+        "step",
+        "1.",
+        "2.",
+        "3.",
+        "一",
+        "二",
+        "三",
+    ]
+    found_turn_indicators = [kw for kw in turn_indicators if kw in output]
+    details["turn_indicators"] = found_turn_indicators
+    if not found_turn_indicators:
+        issues.append("Output lacks multi-turn structure indicators")
+
+    if len(output.strip()) < 50:
+        issues.append("Output is too short, possibly incomplete")
+
+    garbled_pattern = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+    garbled_matches = garbled_pattern.findall(output)
+    details["garbled_chars_count"] = len(garbled_matches)
+    if garbled_matches:
+        issues.append(
+            f"Output contains {len(garbled_matches)} garbled/control characters"
+        )
+
+    return {
+        "test_name": "Multi-turn Dialogue - Context Memory",
+        "passed": len(issues) == 0,
+        "issues": issues,
+        "details": details,
+        "output_preview": output[:1000] if output else "",
+    }
+
+
+def validate_ai_computing_news_output(output):
+    """Validate AI computing news query output.
+
+    Checks:
+    - Output contains AI computing / intelligent computing keywords
+    - Tool usage indicators present (webfetch/websearch)
+    - Output mentions specific news/events (not generic description)
+    - No garbled text
+    """
+    issues = []
+    details = {}
+
+    ai_computing_keywords = [
+        "智算",
+        "算力",
+        "AI算力",
+        "智能计算",
+        "算力中心",
+        "智算中心",
+        "GPU",
+        "芯片",
+        "大模型",
+        "超算",
+        "数据中心",
+        "computing",
+        "AI infrastructure",
+        "data center",
+        "算力网络",
+        "算力集群",
+        "国产算力",
+        "异构算力",
+    ]
+    found_kws = [kw for kw in ai_computing_keywords if kw in output]
+    details["found_ai_computing_keywords"] = found_kws
+
+    if len(found_kws) < 2:
+        issues.append(
+            f"Output lacks AI computing keywords (found {len(found_kws)}: {found_kws})"
+        )
+
+    tool_indicators = [
+        "webfetch",
+        "websearch",
+        "WebSearch",
+        "WebFetch",
+        "搜索",
+        "查询",
+        "检索",
+        "查找",
+        "http",
+        "news",
+        "news.qq.com",
+        "36kr",
+        "jiqizhixin",
+    ]
+    found_tool_indicators = [
+        kw for kw in tool_indicators if kw.lower() in output.lower()
+    ]
+    details["tool_indicators"] = found_tool_indicators
+    if not found_tool_indicators:
+        issues.append("No tool usage indicators found (model may not have used tools)")
+
+    news_structure_indicators = [
+        "新闻",
+        "动态",
+        "消息",
+        "报道",
+        "资讯",
+        "公告",
+        "1.",
+        "2.",
+        "3.",
+        "一、",
+        "二、",
+        "三、",
+        "近日",
+        "近期",
+        "今年",
+        "最新",
+    ]
+    found_news_indicators = [kw for kw in news_structure_indicators if kw in output]
+    details["news_structure_indicators"] = found_news_indicators
+    if not found_news_indicators:
+        issues.append("Output lacks news/announcement structure indicators")
+
+    if len(output.strip()) < 100:
+        issues.append("Output is too short for a news query response")
+
+    garbled_pattern = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+    garbled_matches = garbled_pattern.findall(output)
+    details["garbled_chars_count"] = len(garbled_matches)
+    if garbled_matches:
+        issues.append(
+            f"Output contains {len(garbled_matches)} garbled/control characters"
+        )
+
+    return {
+        "test_name": "Tool Calling - AI Computing News",
+        "passed": len(issues) == 0,
+        "issues": issues,
+        "details": details,
+        "output_preview": output[:1000] if output else "",
+    }
+
+
 def generate_markdown_report(results, output_dir, params):
     """Generate markdown report."""
     summary = results["summary"]
@@ -568,6 +743,94 @@ def main():
 
     with open(
         os.path.join(output_dir, "list_set_output.txt"), "w", encoding="utf-8"
+    ) as f:
+        f.write(
+            f"=== STDOUT ===\n{stdout}\n\n=== STDERR ===\n{stderr}\n\n=== RETURN CODE ===\n{returncode}"
+        )
+
+    # ============================================================
+    # Test 3: Multi-turn Dialogue - Context Memory
+    # ============================================================
+    print("\n" + "=" * 60)
+    print("Test 3: Multi-turn Dialogue - Context Memory")
+    print("=" * 60)
+
+    multi_turn_prompt = (
+        "我们来玩一个数字记忆游戏，请按步骤回答：\n"
+        "第一步：请记住这三个数字：7、13、29。\n"
+        "第二步：请计算这三个数字的和是多少？\n"
+        "第三步：这三个数字中哪些是质数？\n"
+        "请依次回答每一步。"
+    )
+    stdout, stderr, returncode = run_opencode(
+        multi_turn_prompt,
+        args.model,
+        args.config_path,
+        args.work_dir,
+        args.timeout,
+    )
+
+    stdout_clean = strip_ansi(stdout)
+    stderr_clean = strip_ansi(stderr)
+    combined_output = stdout_clean
+    if stderr_clean.strip():
+        print(f"[WARN] stderr: {stderr_clean[:500]}")
+        combined_output += "\n" + stderr_clean
+
+    multi_turn_result = validate_multi_turn_output(combined_output)
+    multi_turn_result["returncode"] = returncode
+    multi_turn_result["stderr_preview"] = stderr_clean[:500] if stderr_clean else ""
+    results["tests"].append(multi_turn_result)
+
+    status = "PASSED" if multi_turn_result["passed"] else "FAILED"
+    print(f"Result: {status}")
+    if multi_turn_result["issues"]:
+        for issue in multi_turn_result["issues"]:
+            print(f"  - {issue}")
+
+    with open(
+        os.path.join(output_dir, "multi_turn_output.txt"), "w", encoding="utf-8"
+    ) as f:
+        f.write(
+            f"=== STDOUT ===\n{stdout}\n\n=== STDERR ===\n{stderr}\n\n=== RETURN CODE ===\n{returncode}"
+        )
+
+    # ============================================================
+    # Test 4: Tool Calling - AI Computing News
+    # ============================================================
+    print("\n" + "=" * 60)
+    print("Test 4: Tool Calling - AI Computing News")
+    print("=" * 60)
+
+    ai_news_prompt = "请搜索并告诉我最近关于智算中心、算力方面的新闻或动态，至少列出2-3条相关资讯。请使用搜索工具获取最新信息。"
+    stdout, stderr, returncode = run_opencode(
+        ai_news_prompt,
+        args.model,
+        args.config_path,
+        args.work_dir,
+        args.timeout,
+    )
+
+    stdout_clean = strip_ansi(stdout)
+    stderr_clean = strip_ansi(stderr)
+    combined_output = stdout_clean
+    if stderr_clean.strip():
+        print(f"[WARN] stderr: {stderr_clean[:500]}")
+        combined_output += "\n" + stderr_clean
+
+    ai_news_result = validate_ai_computing_news_output(combined_output)
+    ai_news_result["returncode"] = returncode
+    ai_news_result["stderr_preview"] = stderr_clean[:500] if stderr_clean else ""
+    results["tests"].append(ai_news_result)
+
+    status = "PASSED" if ai_news_result["passed"] else "FAILED"
+    print(f"Result: {status}")
+    if ai_news_result["issues"]:
+        for issue in ai_news_result["issues"]:
+            print(f"  - {issue}")
+
+    with open(
+        os.path.join(output_dir, "ai_news_output.txt"), "w", encoding="utf-8"
     ) as f:
         f.write(
             f"=== STDOUT ===\n{stdout}\n\n=== STDERR ===\n{stderr}\n\n=== RETURN CODE ===\n{returncode}"

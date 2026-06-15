@@ -212,7 +212,7 @@ ENDSSH
 set -e
 echo "=== 拉取结果到 Jenkins workspace ==="
 rm -rf results
-mkdir -p results/${params.TESTER}
+mkdir -p results/${params.TESTER}/${BUILD_NUMBER}/${params.CHIP}/${params.MODEL}
 
 scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r ${REMOTE_USER}@${REMOTE_HOST}:${params.WORK_DIR}/${resultRelPath} results/${params.TESTER}/${BUILD_NUMBER}/${params.CHIP}/${params.MODEL}/
 
@@ -232,40 +232,52 @@ find results -type f
                         def testStatus = "失败/无结果"
                         def reportHtml = ""
 
-                        def resultFiles = findFiles(glob: "results/**/validation_results.json")
-                        if (resultFiles && resultFiles.length > 0) {
-                            def resultContent = readFile(resultFiles[0].path)
-                            def resultJson = readJSON(text: resultContent)
-                            def summary = resultJson.summary
-                            testStatus = summary.failed == 0 ? "成功" : "部分失败"
+                        def mdFiles = findFiles(glob: "results/**/validation_report.md")
+                        if (mdFiles && mdFiles.length > 0) {
+                            def mdContent = readFile(mdFiles[0].path)
+                            def htmlContent = mdContent
+                                .replace('&', '&amp;')
+                                .replace('<', '&lt;')
+                                .replace('>', '&gt;')
 
-                            for (def test : resultJson.tests) {
-                                def statusLabel = test.passed ? "PASSED" : "FAILED"
-                                def escapedOutput = test.output_preview
-                                    .replace('&', '&amp;')
-                                    .replace('<', '&lt;')
-                                    .replace('>', '&gt;')
-                                    .replace('\n', '<br/>')
-
-                                def issuesHtml = ""
-                                if (test.issues && test.issues.size() > 0) {
-                                    issuesHtml = "<ul>" + test.issues.collect { "<li>${it}</li>" }.join('') + "</ul>"
-                                }
-
-                                reportHtml += """
-                                    <div class="report-block">
-                                        <h3 style="margin-top:0;color:${test.passed ? '#4CAF50' : '#f44336'};">
-                                            ${test.test_name} - ${statusLabel}
-                                        </h3>
-                                        ${issuesHtml}
-                                        <div class="report-content">
-                                            <pre>${escapedOutput}</pre>
-                                        </div>
-                                    </div>
-                                """
+                            htmlContent = htmlContent.replaceAll(/(?m)^####?\s+(.+)$/) { match, title -> "<h3>${title.trim()}</h3>" }
+                            htmlContent = htmlContent.replaceAll(/(?m)^##\s+(.+)$/) { match, title -> "<h2>${title.trim()}</h2>" }
+                            htmlContent = htmlContent.replaceAll(/(?m)^---\s*$/) { "<hr/>" }
+                            htmlContent = htmlContent.replaceAll(/(?m)^\*\*(.+?)\*\*\s*:\s*/) { match, key -> "<strong>${key}</strong>: " }
+                            htmlContent = htmlContent.replaceAll(/\*\*(.+?)\*\*/) { match, text -> "<strong>${text}</strong>" }
+                            htmlContent = htmlContent.replaceAll(/(?m)^\|\s*(.+?)\s*\|\s*$/) { match, row -> 
+                                def cells = row.split('\\|').collect { it.trim() }.findAll { it }
+                                def isSeparator = cells.every { it.matches(/^-+$/) }
+                                if (isSeparator) return ""
+                                def cellHtml = cells.collect { "<td style='border:1px solid #ddd;padding:8px;'>${it}</td>" }.join('')
+                                return "<tr>${cellHtml}</tr>"
                             }
+                            htmlContent = htmlContent.replaceAll(/(?ms)^```(.*?)```/) { match, code -> 
+                                def codeContent = code.replaceAll(/(?s)^```\w*\n?/, '').replaceAll(/\n?```$/, '')
+                                "<pre style='background:#f4f4f4;border:1px solid #ddd;border-radius:4px;padding:12px;overflow-x:auto;font-family:monospace;font-size:12px;white-space:pre-wrap;word-break:break-all;'>${codeContent}</pre>"
+                            }
+                            htmlContent = htmlContent.replaceAll(/^- (.+)$/m) { match, item -> "<li>${item.trim()}</li>" }
+                            htmlContent = htmlContent.replaceAll(/(?m)^\*\s+(.+)$/) { match, item -> "<li>${item.trim()}</li>" }
+                            htmlContent = htmlContent.replace('\n\n', '</p><p>')
+                            htmlContent = htmlContent.replace('\n', '<br/>')
+
+                            def resultFiles = findFiles(glob: "results/**/validation_results.json")
+                            if (resultFiles && resultFiles.length > 0) {
+                                def resultContent = readFile(resultFiles[0].path)
+                                def resultJson = readJSON(text: resultContent)
+                                def summary = resultJson.summary
+                                testStatus = summary.failed == 0 ? "成功" : "部分失败"
+                            }
+
+                            reportHtml = """
+                                <div class="report-block">
+                                    <div class="report-content">
+                                        <p>${htmlContent}</p>
+                                    </div>
+                                </div>
+                            """
                         } else {
-                            reportHtml = '<p>未找到验证结果文件</p>'
+                            reportHtml = '<p>未找到验证报告文件</p>'
                         }
 
                         def emailBody = """
@@ -287,7 +299,7 @@ find results -type f
 <body>
 <div class="container">
 <div class="header">
-    <h2 style="margin: 0;">OpenCode CLI 验证测试报告 - 构建 #${BUILD_NUMBER}</h2>
+    <h2 style="margin: 0;">模型推理 - OpenCode CLI 验证测试报告 - 构建 #${BUILD_NUMBER}</h2>
 </div>
 <div class="content">
     <h3>测试概要</h3>
