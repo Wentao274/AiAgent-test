@@ -298,7 +298,7 @@ find results -type f
                         println("测试状态: ${testStatus}")
 
                         emailext(
-                            subject: "[OpenCode验证测试报告] #${BUILD_NUMBER} ${params.CHIP} - ${params.MODEL} (${testStatus})",
+                            subject: "[模型推理 - OpenCode验证测试报告] #${BUILD_NUMBER} ${params.CHIP} - ${params.MODEL} (${testStatus})",
                             body: emailBody,
                             to: "${params.RECIPIENTS}",
                             mimeType: 'text/html',

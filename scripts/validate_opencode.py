@@ -457,6 +457,184 @@ def validate_ai_computing_news_output(output):
     }
 
 
+def validate_boiling_point_output(output):
+    """Validate boiling point of water knowledge output.
+
+    Checks:
+    - Output contains correct boiling point (100°C or 100 degrees Celsius)
+    - Contains temperature-related keywords
+    - No garbled text
+    - Output is coherent
+    """
+    issues = []
+    details = {}
+
+    has_correct_answer = (
+        bool(re.search(r"100\s*[°℃度]", output))
+        or "一百度" in output
+        or "100摄氏度" in output
+    )
+    details["correct_boiling_point"] = has_correct_answer
+    if not has_correct_answer:
+        issues.append("Output does not contain correct boiling point of water (100°C)")
+
+    temp_keywords = [
+        "沸点",
+        "沸腾",
+        "摄氏",
+        "°C",
+        "℃",
+        "度",
+        "boiling",
+        "Celsius",
+        "100",
+    ]
+    found_kws = [kw for kw in temp_keywords if kw in output]
+    details["found_temperature_keywords"] = found_kws
+    if len(found_kws) < 2:
+        issues.append(
+            f"Output lacks temperature-related keywords (found {len(found_kws)}: {found_kws})"
+        )
+
+    context_keywords = [
+        "水",
+        "标准大气压",
+        "压强",
+        "海拔",
+        "water",
+        "atmosphere",
+        "pressure",
+    ]
+    found_context = [kw for kw in context_keywords if kw in output]
+    details["found_context_keywords"] = found_context
+
+    if len(output.strip()) < 10:
+        issues.append("Output is too short, possibly incomplete")
+
+    garbled_pattern = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+    garbled_matches = garbled_pattern.findall(output)
+    details["garbled_chars_count"] = len(garbled_matches)
+    if garbled_matches:
+        issues.append(
+            f"Output contains {len(garbled_matches)} garbled/control characters"
+        )
+
+    return {
+        "test_name": "Knowledge - Boiling Point of Water",
+        "passed": len(issues) == 0,
+        "issues": issues,
+        "details": details,
+        "output_preview": output[:1000] if output else "",
+    }
+
+
+def validate_sales_table_output(output):
+    """Validate sales data monthly table template output.
+
+    Checks:
+    - Output contains table structure (borders, pipes, or markdown table)
+    - Contains month-related keywords
+    - Contains sales-related keywords
+    - No garbled text
+    """
+    issues = []
+    details = {}
+
+    table_indicators = [
+        "|",
+        "---",
+        "+",
+        "-",
+        "┌",
+        "┬",
+        "┐",
+        "│",
+        "├",
+        "┼",
+        "┤",
+        "└",
+        "┴",
+        "┘",
+    ]
+    found_table = [kw for kw in table_indicators if kw in output]
+    details["table_structure_indicators"] = found_table
+    if len(found_table) < 2:
+        issues.append(
+            f"Output lacks table structure indicators (found {len(found_table)}: {found_table})"
+        )
+
+    month_keywords = [
+        "月份",
+        "月",
+        "1月",
+        "2月",
+        "January",
+        "February",
+        "Jan",
+        "Feb",
+        "Q1",
+        "Q2",
+        "月度",
+        "季度",
+    ]
+    found_months = [kw for kw in month_keywords if kw in output]
+    details["found_month_keywords"] = found_months
+    if not found_months:
+        issues.append("Output does not contain month-related keywords")
+
+    sales_keywords = [
+        "销售",
+        "销售额",
+        "销量",
+        "营收",
+        "收入",
+        "利润",
+        "sales",
+        "revenue",
+        "profit",
+        "amount",
+        "金额",
+        "数量",
+    ]
+    found_sales = [kw for kw in sales_keywords if kw in output]
+    details["found_sales_keywords"] = found_sales
+    if not found_sales:
+        issues.append("Output does not contain sales-related keywords")
+
+    column_keywords = [
+        "合计",
+        "总计",
+        "总计/平均",
+        "同比",
+        "环比",
+        "增长率",
+        "Total",
+        "Sum",
+        "YoY",
+    ]
+    found_columns = [kw for kw in column_keywords if kw in output]
+    details["found_column_keywords"] = found_columns
+
+    if len(output.strip()) < 50:
+        issues.append("Output is too short for a table template response")
+
+    garbled_pattern = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+    garbled_matches = garbled_pattern.findall(output)
+    details["garbled_chars_count"] = len(garbled_matches)
+    if garbled_matches:
+        issues.append(
+            f"Output contains {len(garbled_matches)} garbled/control characters"
+        )
+
+    return {
+        "test_name": "Structured Output - Sales Data Table Template",
+        "passed": len(issues) == 0,
+        "issues": issues,
+        "details": details,
+        "output_preview": output[:1000] if output else "",
+    }
+
+
 def generate_markdown_report(results, output_dir, params):
     """Generate markdown report."""
     summary = results["summary"]
@@ -912,6 +1090,88 @@ def main():
 
     with open(
         os.path.join(output_dir, "ai_news_output.txt"), "w", encoding="utf-8"
+    ) as f:
+        f.write(
+            f"=== STDOUT ===\n{stdout}\n\n=== STDERR ===\n{stderr}\n\n=== RETURN CODE ===\n{returncode}"
+        )
+
+    # ============================================================
+    # Test 5: Knowledge - Boiling Point of Water
+    # ============================================================
+    print("\n" + "=" * 60)
+    print("Test 5: Knowledge - Boiling Point of Water")
+    print("=" * 60)
+
+    boiling_prompt = "水的沸点是多少摄氏度？"
+    stdout, stderr, returncode = run_opencode(
+        boiling_prompt,
+        args.model,
+        args.config_path,
+        args.work_dir,
+        args.timeout,
+    )
+
+    stdout_clean = strip_ansi(stdout)
+    stderr_clean = strip_ansi(stderr)
+    combined_output = stdout_clean
+    if stderr_clean.strip():
+        print(f"[WARN] stderr: {stderr_clean[:500]}")
+        combined_output += "\n" + stderr_clean
+
+    boiling_result = validate_boiling_point_output(combined_output)
+    boiling_result["returncode"] = returncode
+    boiling_result["stderr_preview"] = stderr_clean[:500] if stderr_clean else ""
+    results["tests"].append(boiling_result)
+
+    status = "PASSED" if boiling_result["passed"] else "FAILED"
+    print(f"Result: {status}")
+    if boiling_result["issues"]:
+        for issue in boiling_result["issues"]:
+            print(f"  - {issue}")
+
+    with open(
+        os.path.join(output_dir, "boiling_point_output.txt"), "w", encoding="utf-8"
+    ) as f:
+        f.write(
+            f"=== STDOUT ===\n{stdout}\n\n=== STDERR ===\n{stderr}\n\n=== RETURN CODE ===\n{returncode}"
+        )
+
+    # ============================================================
+    # Test 6: Structured Output - Sales Data Table Template
+    # ============================================================
+    print("\n" + "=" * 60)
+    print("Test 6: Structured Output - Sales Data Table Template")
+    print("=" * 60)
+
+    sales_prompt = "请帮我设计一个销售数据按月份统计的表格模版并输出到控制台"
+    stdout, stderr, returncode = run_opencode(
+        sales_prompt,
+        args.model,
+        args.config_path,
+        args.work_dir,
+        args.timeout,
+    )
+
+    stdout_clean = strip_ansi(stdout)
+    stderr_clean = strip_ansi(stderr)
+    combined_output = stdout_clean
+    if stderr_clean.strip():
+        print(f"[WARN] stderr: {stderr_clean[:500]}")
+        combined_output += "\n" + stderr_clean
+
+    sales_result = validate_sales_table_output(combined_output)
+    sales_result["returncode"] = returncode
+    sales_result["stderr_preview"] = stderr_clean[:500] if stderr_clean else ""
+    results["tests"].append(sales_result)
+
+    status = "PASSED" if sales_result["passed"] else "FAILED"
+    print(f"Result: {status}")
+    if sales_result["issues"]:
+        for issue in sales_result["issues"]:
+            print(f"  - {issue}")
+
+    with open(
+        os.path.join(output_dir, "sales_table_output.txt"), "w", encoding="utf-8"
     ) as f:
         f.write(
             f"=== STDOUT ===\n{stdout}\n\n=== STDERR ===\n{stderr}\n\n=== RETURN CODE ===\n{returncode}"
