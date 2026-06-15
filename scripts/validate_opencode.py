@@ -287,15 +287,15 @@ def validate_multi_turn_output(output):
 
     Prompt asks the model to remember numbers, compute sum, identify primes.
     Checks:
-    - Model correctly references prior context (the numbers 7, 13, 29)
-    - Provides correct sum (49)
+    - Model correctly references prior context (the numbers 7, 13, 29, 129)
+    - Provides correct sum (178)
     - Identifies prime numbers correctly
     - Output is coherent across turns
     """
     issues = []
     details = {}
 
-    context_keywords = ["7", "13", "29"]
+    context_keywords = ["7", "13", "29", "129"]
     found_numbers = [n for n in context_keywords if n in output]
     details["referenced_numbers"] = found_numbers
     if len(found_numbers) < 2:
@@ -303,10 +303,10 @@ def validate_multi_turn_output(output):
             f"Model did not reference enough prior context numbers (found {len(found_numbers)}: {found_numbers})"
         )
 
-    has_correct_sum = "49" in output
-    details["correct_sum_49"] = has_correct_sum
+    has_correct_sum = "178" in output
+    details["correct_sum_178"] = has_correct_sum
     if not has_correct_sum:
-        issues.append("Model did not provide correct sum (49) of 7+13+29")
+        issues.append("Model did not provide correct sum (178) of 7+13+29+129")
 
     prime_keywords = ["质数", "素数", "prime"]
     has_prime_mention = any(kw in output for kw in prime_keywords)
@@ -665,6 +665,8 @@ def generate_markdown_report(results, output_dir, params):
     for test in results["tests"]:
         status = "PASSED" if test["passed"] else "FAILED"
         report += f"### {test['test_name']} - {status}\n\n"
+        if test.get("prompt"):
+            report += f"**Prompt:** {test['prompt']}\n\n"
         if test["issues"]:
             report += "**Issues:**\n"
             for issue in test["issues"]:
@@ -718,6 +720,16 @@ def generate_html_report(results, output_dir, params):
         color = "#4CAF50" if test["passed"] else "#f44336"
         html += f'<div style="margin-bottom:20px;border:1px solid #ddd;padding:15px;background:#fafafa;border-radius:5px;">\n'
         html += f'<h3 style="margin-top:0;color:{color};">{test["test_name"]} - {status}</h3>\n'
+
+        if test.get("prompt"):
+            safe_prompt = (
+                test["prompt"]
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\n", "<br/>")
+            )
+            html += f"<p><strong>Prompt:</strong> {safe_prompt}</p>\n"
 
         if test.get("issues"):
             html += "<p><strong>Issues:</strong></p><ul>\n"
@@ -891,6 +903,7 @@ def main():
         results["tests"].append(
             {
                 "test_name": "Smoke Test",
+                "prompt": smoke_prompt,
                 "passed": False,
                 "issues": [
                     f"opencode run returned code {returncode}, stdout too short or empty"
@@ -952,6 +965,7 @@ def main():
     weather_result["returncode"] = returncode
     weather_result["stderr_preview"] = stderr_clean[:500] if stderr_clean else ""
     results["tests"].append(weather_result)
+    weather_result["prompt"] = weather_prompt
 
     status = "PASSED" if weather_result["passed"] else "FAILED"
     print(f"Result: {status}")
@@ -993,6 +1007,7 @@ def main():
     list_set_result["returncode"] = returncode
     list_set_result["stderr_preview"] = stderr_clean[:500] if stderr_clean else ""
     results["tests"].append(list_set_result)
+    list_set_result["prompt"] = list_set_prompt
 
     status = "PASSED" if list_set_result["passed"] else "FAILED"
     print(f"Result: {status}")
@@ -1016,9 +1031,9 @@ def main():
 
     multi_turn_prompt = (
         "我们来玩一个数字记忆游戏，请按步骤回答：\n"
-        "第一步：请记住这三个数字：7、13、29。\n"
-        "第二步：请计算这三个数字的和是多少？\n"
-        "第三步：这三个数字中哪些是质数？\n"
+        "第一步：请记住这四个数字：7、13、29、129。\n"
+        "第二步：请计算这四个数字的和是多少？\n"
+        "第三步：这四个数字中哪些是质数？\n"
         "请依次回答每一步。"
     )
     stdout, stderr, returncode = run_opencode(
@@ -1040,6 +1055,7 @@ def main():
     multi_turn_result["returncode"] = returncode
     multi_turn_result["stderr_preview"] = stderr_clean[:500] if stderr_clean else ""
     results["tests"].append(multi_turn_result)
+    multi_turn_result["prompt"] = multi_turn_prompt
 
     status = "PASSED" if multi_turn_result["passed"] else "FAILED"
     print(f"Result: {status}")
@@ -1081,6 +1097,7 @@ def main():
     ai_news_result["returncode"] = returncode
     ai_news_result["stderr_preview"] = stderr_clean[:500] if stderr_clean else ""
     results["tests"].append(ai_news_result)
+    ai_news_result["prompt"] = ai_news_prompt
 
     status = "PASSED" if ai_news_result["passed"] else "FAILED"
     print(f"Result: {status}")
@@ -1122,6 +1139,7 @@ def main():
     boiling_result["returncode"] = returncode
     boiling_result["stderr_preview"] = stderr_clean[:500] if stderr_clean else ""
     results["tests"].append(boiling_result)
+    boiling_result["prompt"] = boiling_prompt
 
     status = "PASSED" if boiling_result["passed"] else "FAILED"
     print(f"Result: {status}")
@@ -1163,6 +1181,7 @@ def main():
     sales_result["returncode"] = returncode
     sales_result["stderr_preview"] = stderr_clean[:500] if stderr_clean else ""
     results["tests"].append(sales_result)
+    sales_result["prompt"] = sales_prompt
 
     status = "PASSED" if sales_result["passed"] else "FAILED"
     print(f"Result: {status}")
