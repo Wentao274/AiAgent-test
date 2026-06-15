@@ -65,6 +65,62 @@ def check_opencode_config(config_path):
         return False
 
 
+def _snapshot_files(directory):
+    """Take a snapshot of all files in a directory (recursive)."""
+    files = set()
+    for root, dirs, filenames in os.walk(directory):
+        for name in filenames:
+            files.add(os.path.join(root, name))
+        for name in dirs:
+            pass
+    return files
+
+
+def _cleanup_new_files(directory, snapshot_before, protected_dirs=None):
+    """Remove files created after the snapshot, excluding protected dirs."""
+    if protected_dirs is None:
+        protected_dirs = set()
+
+    snapshot_after = _snapshot_files(directory)
+    new_files = snapshot_after - snapshot_before
+
+    removed = []
+    for fpath in sorted(new_files):
+        skip = False
+        for pd in protected_dirs:
+            if fpath.startswith(pd):
+                skip = True
+                break
+        if skip:
+            continue
+        try:
+            os.remove(fpath)
+            removed.append(fpath)
+        except Exception:
+            pass
+
+    for root, dirs, filenames in os.walk(directory, topdown=False):
+        for d in dirs:
+            dpath = os.path.join(root, d)
+            skip = False
+            for pd in protected_dirs:
+                if dpath.startswith(pd) or pd.startswith(dpath):
+                    skip = True
+                    break
+            if skip:
+                continue
+            try:
+                if not os.listdir(dpath):
+                    os.rmdir(dpath)
+                    removed.append(dpath + "/")
+            except Exception:
+                pass
+
+    if removed:
+        print(f"[INFO] Cleaned up {len(removed)} file(s) created by model: {removed}")
+    return removed
+
+
 def run_opencode(prompt, model, config_path, work_dir, timeout=300):
     """Run opencode in non-interactive mode and capture output."""
     env = os.environ.copy()
@@ -89,6 +145,9 @@ def run_opencode(prompt, model, config_path, work_dir, timeout=300):
     print(f"[INFO] Work dir: {work_dir}")
     print(f"[INFO] BASE_URL env: {env.get('BASE_URL', '<not set>')}")
 
+    results_dir = os.path.join(work_dir, "results")
+    snapshot_before = _snapshot_files(work_dir)
+
     try:
         result = subprocess.run(
             cmd,
@@ -98,6 +157,7 @@ def run_opencode(prompt, model, config_path, work_dir, timeout=300):
             cwd=work_dir,
             env=env,
         )
+        _cleanup_new_files(work_dir, snapshot_before, protected_dirs={results_dir})
         return result.stdout, result.stderr, result.returncode
     except subprocess.TimeoutExpired as e:
         stdout = e.stdout.decode("utf-8", errors="replace") if e.stdout else ""
