@@ -96,6 +96,21 @@ docker ps | grep ${containerName}
 echo "=== 检查 opencode 版本 ==="
 docker exec ${containerName} opencode --version || echo "opencode version check failed"
 
+echo "=== 验证 BASE_URL 环境变量 ==="
+docker exec ${containerName} sh -c 'echo "BASE_URL=$BASE_URL"'
+
+echo "=== 验证 opencode 配置文件 ==="
+docker exec ${containerName} cat /workspace/AiAgent-test/config/opencode.json
+
+echo "=== 测试 API 连通性 ==="
+docker exec ${containerName} sh -c 'wget -q -O- --timeout=10 "$BASE_URL/v1/models" 2>&1 || echo "wget failed, trying curl"; curl -s --connect-timeout 10 "$BASE_URL/v1/models" 2>&1 || echo "API connectivity check failed"'
+
+echo "=== 列出 opencode 可识别模型 ==="
+docker exec ${containerName} sh -c 'OPENCODE_CONFIG=/workspace/AiAgent-test/config/opencode.json opencode models 2>&1 | head -30'
+
+echo "=== 快速测试 opencode run ==="
+docker exec ${containerName} sh -c 'OPENCODE_CONFIG=/workspace/AiAgent-test/config/opencode.json timeout 60 opencode run "Say hi" --model custom-openai/kimi-k2.5 --dangerously-skip-permissions 2>&1 || echo "opencode run quick test failed/timed out"'
+
 echo "=== 检查 Python 环境 ==="
 docker exec ${containerName} sh -c "python3 --version || python --version || echo 'Python not found, will install'"
 
@@ -113,7 +128,7 @@ ENDSSH
             steps {
                 script {
                     def containerName = env.CONTAINER_NAME
-                    def modelName = "openai/${params.MODEL}"
+                    def modelName = "custom-openai/${params.MODEL}"
 
                     println("=== 运行 OpenCode 验证脚本 ===")
                     println("模型: ${modelName}")
