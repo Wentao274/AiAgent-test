@@ -77,9 +77,7 @@ cat ${params.WORK_DIR}/config/opencode.json
 echo "=== 启动 opencode 容器 ==="
 docker run -d --name ${containerName} \
     --network host \
-    --memory=16g \
-    --shm-size=1g \
-    --entrypoint bash \
+    --entrypoint sh \
     -v ${params.WORK_DIR}:/workspace/AiAgent-test \
     -e OPENCODE_CONFIG=/workspace/AiAgent-test/config/opencode.json \
     -e BASE_URL=${params.BASE_URL} \
@@ -99,10 +97,10 @@ echo "=== 检查 opencode 版本 ==="
 docker exec ${containerName} opencode --version || echo "opencode version check failed"
 
 echo "=== 检查 Python 环境 ==="
-docker exec ${containerName} bash -c "python3 --version || python --version || echo 'Python not found, will install'"
+docker exec ${containerName} sh -c "python3 --version || python --version || echo 'Python not found, will install'"
 
 echo "=== 安装 Python3（如需要）==="
-docker exec ${containerName} bash -c "command -v python3 || (apt-get update -qq && apt-get install -y -qq python3 2>/dev/null) || (apk add --no-cache python3 2>/dev/null) || echo 'Python install skipped'"
+docker exec ${containerName} sh -c "command -v python3 || (apk add --no-cache python3 2>/dev/null) || echo 'Python install skipped'"
 
 ENDSSH
 """
@@ -129,14 +127,26 @@ set -e
 echo "=== 确认容器运行 ==="
 docker ps | grep ${containerName}
 
+echo "=== 预检查: 验证 opencode 配置 ==="
+docker exec ${containerName} cat /workspace/AiAgent-test/config/opencode.json
+
+echo "=== 预检查: 验证 BASE_URL 环境变量 ==="
+docker exec ${containerName} sh -c 'echo "BASE_URL=\$BASE_URL"'
+
+echo "=== 预检查: 测试 API 连通性 ==="
+docker exec ${containerName} sh -c 'wget -q -O- --timeout=10 "\${BASE_URL}/v1/models" 2>&1 || curl -s --connect-timeout 10 "\${BASE_URL}/v1/models" 2>&1 || echo "API connectivity check failed (no wget/curl)"'
+
+echo "=== 预检查: 验证 opencode 可识别模型 ==="
+docker exec ${containerName} sh -c 'OPENCODE_CONFIG=/workspace/AiAgent-test/config/opencode.json opencode models 2>&1 | head -30'
+
 echo "=== 运行 Python 验证脚本 ==="
-docker exec ${containerName} bash -c \\
+docker exec ${containerName} sh -c \\
     "python3 /workspace/AiAgent-test/scripts/validate_opencode.py \\
         --model '${modelName}' \\
         --config-path /workspace/AiAgent-test/config/opencode.json \\
         --work-dir /workspace/AiAgent-test \\
         --output-dir /workspace/AiAgent-test/results \\
-        --timeout 180 \\
+        --timeout 300 \\
         --base-url '${params.BASE_URL}' \\
         --infra '${params.INFRA}' \\
         --chip '${params.CHIP}' \\
