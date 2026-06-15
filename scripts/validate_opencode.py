@@ -265,7 +265,7 @@ def validate_weather_output(output):
         "passed": len(issues) == 0,
         "issues": issues,
         "details": details,
-        "output_preview": output[:1000] if output else "",
+        "output_preview": output[:3000] if output else "",
     }
 
 
@@ -350,7 +350,7 @@ def validate_list_set_output(output):
         "passed": len(issues) == 0,
         "issues": issues,
         "details": details,
-        "output_preview": output[:1000] if output else "",
+        "output_preview": output[:3000] if output else "",
     }
 
 
@@ -420,7 +420,7 @@ def validate_multi_turn_output(output):
         "passed": len(issues) == 0,
         "issues": issues,
         "details": details,
-        "output_preview": output[:1000] if output else "",
+        "output_preview": output[:3000] if output else "",
     }
 
 
@@ -525,7 +525,7 @@ def validate_ai_computing_news_output(output):
         "passed": len(issues) == 0,
         "issues": issues,
         "details": details,
-        "output_preview": output[:1000] if output else "",
+        "output_preview": output[:3000] if output else "",
     }
 
 
@@ -596,7 +596,7 @@ def validate_boiling_point_output(output):
         "passed": len(issues) == 0,
         "issues": issues,
         "details": details,
-        "output_preview": output[:1000] if output else "",
+        "output_preview": output[:3000] if output else "",
     }
 
 
@@ -703,7 +703,7 @@ def validate_sales_table_output(output):
         "passed": len(issues) == 0,
         "issues": issues,
         "details": details,
-        "output_preview": output[:1000] if output else "",
+        "output_preview": output[:3000] if output else "",
     }
 
 
@@ -985,7 +985,7 @@ def main():
                     "stdout_preview": stdout_clean[:500],
                     "stderr_preview": stderr_clean[:500],
                 },
-                "output_preview": stdout_clean[:1000],
+                "output_preview": stdout_clean[:3000],
             }
         )
         total = 1
