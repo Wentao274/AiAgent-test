@@ -60,8 +60,12 @@ ENDSSH
                     def containerName = "opencode-validate-${params.CHIP}-${safeModel}-${BUILD_NUMBER}"
                     env.CONTAINER_NAME = containerName
 
+                    def curdate = new Date().format('yyyyMMddHHmmss')
+                    env.CURDATE = curdate
+
                     println("=== 启动 opencode 容器 ===")
                     println("容器名: ${containerName}")
+                    println("时间戳: ${curdate}")
 
                     sshagent(credentials: ["${SSH_CREDENTIALS}"]) {
                         sh """
@@ -97,19 +101,19 @@ echo "=== 检查 opencode 版本 ==="
 docker exec ${containerName} opencode --version || echo "opencode version check failed"
 
 echo "=== 验证 BASE_URL 环境变量 ==="
-docker exec ${containerName} sh -c 'echo "BASE_URL=$BASE_URL"'
+docker exec ${containerName} sh -c 'echo "BASE_URL=\$BASE_URL"'
 
 echo "=== 验证 opencode 配置文件 ==="
 docker exec ${containerName} cat /workspace/AiAgent-test/config/opencode.json
 
 echo "=== 测试 API 连通性 ==="
-docker exec ${containerName} sh -c 'wget -q -O- --timeout=10 "$BASE_URL/v1/models" 2>&1 || echo "wget failed, trying curl"; curl -s --connect-timeout 10 "$BASE_URL/v1/models" 2>&1 || echo "API connectivity check failed"'
+docker exec ${containerName} sh -c 'wget -q -O- --timeout=10 "\$BASE_URL/v1/models" 2>&1 || echo "API connectivity check failed"'
 
 echo "=== 列出 opencode 可识别模型 ==="
 docker exec ${containerName} sh -c 'OPENCODE_CONFIG=/workspace/AiAgent-test/config/opencode.json opencode models 2>&1 | head -30'
 
 echo "=== 快速测试 opencode run ==="
-docker exec ${containerName} sh -c 'OPENCODE_CONFIG=/workspace/AiAgent-test/config/opencode.json timeout 60 opencode run "Say hi" --model custom-openai/kimi-k2.5 --dangerously-skip-permissions 2>&1 || echo "opencode run quick test failed/timed out"'
+docker exec ${containerName} sh -c 'OPENCODE_CONFIG=/workspace/AiAgent-test/config/opencode.json timeout 60 opencode run "Say hi" --model custom-openai/${params.MODEL} --dangerously-skip-permissions 2>&1 || echo "opencode run quick test failed/timed out"'
 
 echo "=== 检查 Python 环境 ==="
 docker exec ${containerName} sh -c "python3 --version || python --version || echo 'Python not found, will install'"
@@ -129,9 +133,11 @@ ENDSSH
                 script {
                     def containerName = env.CONTAINER_NAME
                     def modelName = "custom-openai/${params.MODEL}"
+                    def curdate = env.CURDATE
 
                     println("=== 运行 OpenCode 验证脚本 ===")
                     println("模型: ${modelName}")
+                    println("时间戳: ${curdate}")
 
                     sshagent(credentials: ["${SSH_CREDENTIALS}"]) {
                         catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
@@ -141,18 +147,6 @@ set -e
 
 echo "=== 确认容器运行 ==="
 docker ps | grep ${containerName}
-
-echo "=== 预检查: 验证 opencode 配置 ==="
-docker exec ${containerName} cat /workspace/AiAgent-test/config/opencode.json
-
-echo "=== 预检查: 验证 BASE_URL 环境变量 ==="
-docker exec ${containerName} sh -c 'echo "BASE_URL=\$BASE_URL"'
-
-echo "=== 预检查: 测试 API 连通性 ==="
-docker exec ${containerName} sh -c 'wget -q -O- --timeout=10 "\${BASE_URL}/v1/models" 2>&1 || curl -s --connect-timeout 10 "\${BASE_URL}/v1/models" 2>&1 || echo "API connectivity check failed (no wget/curl)"'
-
-echo "=== 预检查: 验证 opencode 可识别模型 ==="
-docker exec ${containerName} sh -c 'OPENCODE_CONFIG=/workspace/AiAgent-test/config/opencode.json opencode models 2>&1 | head -30'
 
 echo "=== 运行 Python 验证脚本 ==="
 docker exec ${containerName} sh -c \\
@@ -166,12 +160,14 @@ docker exec ${containerName} sh -c \\
         --infra '${params.INFRA}' \\
         --chip '${params.CHIP}' \\
         --pd '${params.PD}' \\
-        --tester '${params.TESTER}'"
+        --tester '${params.TESTER}' \\
+        --build-number '${BUILD_NUMBER}' \\
+        --curdate '${curdate}'"
 
 echo "=== 验证脚本执行完成 ==="
 
-echo "=== 查看结果文件 ==="
-docker exec ${containerName} ls -la /workspace/AiAgent-test/results/ || echo "Results directory not found"
+echo "=== 查看结果目录结构 ==="
+docker exec ${containerName} find /workspace/AiAgent-test/results -type f || echo "Results directory not found"
 
 ENDSSH
 """
@@ -181,29 +177,33 @@ ENDSSH
             }
         }
 
-        stage('拉取测试结果') {
+        stage('打包并拉取测试结果') {
             steps {
                 sshagent(credentials: ["${SSH_CREDENTIALS}"]) {
                     catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
                         script {
-                            def containerName = env.CONTAINER_NAME
-                            def buildsDir = "builds/${BUILD_NUMBER}"
+                            def curdate = env.CURDATE
+                            def resultRelPath = "results/${params.TESTER}/${BUILD_NUMBER}/${params.CHIP}/${params.MODEL}/${curdate}"
 
-                            println("=== 拉取测试结果到 Jenkins workspace ===")
+                            println("=== 打包并拉取测试结果 ===")
+                            println("结果路径: ${resultRelPath}")
 
                             sh """
 ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} << 'ENDSSH'
 set -e
 
-echo "=== 从容器中复制结果到宿主机 ==="
-mkdir -p ${params.WORK_DIR}/results_backup/${BUILD_NUMBER}
-docker cp ${containerName}:/workspace/AiAgent-test/results/. ${params.WORK_DIR}/results_backup/${BUILD_NUMBER}/
+echo "=== 在宿主机创建输出日志压缩包 ==="
+cd ${params.WORK_DIR}/${resultRelPath}
+if ls *.txt 1>/dev/null 2>&1; then
+    tar czf output_logs.tar.gz *.txt
+    echo "压缩包创建成功: output_logs.tar.gz"
+    ls -la output_logs.tar.gz
+else
+    echo "没有找到 txt 文件，跳过压缩"
+fi
 
 echo "=== 结果文件列表 ==="
-ls -la ${params.WORK_DIR}/results_backup/${BUILD_NUMBER}/
-
-echo "=== 验证结果 JSON ==="
-cat ${params.WORK_DIR}/results_backup/${BUILD_NUMBER}/validation_results.json || echo "No validation_results.json found"
+ls -la ${params.WORK_DIR}/${resultRelPath}/
 
 ENDSSH
 """
@@ -211,13 +211,13 @@ ENDSSH
                             sh """
 set -e
 echo "=== 拉取结果到 Jenkins workspace ==="
-rm -rf ${buildsDir}
-mkdir -p ${buildsDir}
+rm -rf results
+mkdir -p results/${params.TESTER}
 
-scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r ${REMOTE_USER}@${REMOTE_HOST}:${params.WORK_DIR}/results_backup/${BUILD_NUMBER}/ ./${buildsDir}/
+scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r ${REMOTE_USER}@${REMOTE_HOST}:${params.WORK_DIR}/${resultRelPath} results/${params.TESTER}/${BUILD_NUMBER}/${params.CHIP}/${params.MODEL}/
 
 echo "=== 拉取完成，查看文件 ==="
-find ./${buildsDir} -type f
+find results -type f
 """
                         }
                     }
@@ -229,13 +229,12 @@ find ./${buildsDir} -type f
             steps {
                 catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
                     script {
-                        def buildsDir = "builds/${BUILD_NUMBER}"
                         def testStatus = "失败/无结果"
                         def reportHtml = ""
 
-                        def resultFile = findFiles(glob: "${buildsDir}/validation_results.json")
-                        if (resultFile && resultFile.length > 0) {
-                            def resultContent = readFile(resultFile[0].path)
+                        def resultFiles = findFiles(glob: "results/**/validation_results.json")
+                        if (resultFiles && resultFiles.length > 0) {
+                            def resultContent = readFile(resultFiles[0].path)
                             def resultJson = readJSON(text: resultContent)
                             def summary = resultJson.summary
                             testStatus = summary.failed == 0 ? "成功" : "部分失败"
@@ -267,24 +266,6 @@ find ./${buildsDir} -type f
                             }
                         } else {
                             reportHtml = '<p>未找到验证结果文件</p>'
-                        }
-
-                        def mdFiles = findFiles(glob: "${buildsDir}/**/*.md")
-                        if (mdFiles && mdFiles.length > 0) {
-                            for (def mdFile : mdFiles) {
-                                def mdContent = readFile(mdFile.path)
-                                def escapedMd = mdContent
-                                    .replace('&', '&amp;')
-                                    .replace('<', '&lt;')
-                                    .replace('>', '&gt;')
-                                    .replace('\n', '<br/>')
-                                reportHtml += """
-                                    <div class="report-block">
-                                        <h3 style="color:#2196F3;">${mdFile.name}</h3>
-                                        <pre style="background:#f4f4f4;border:1px solid #ddd;border-radius:4px;padding:12px;overflow-x:auto;font-family:monospace;font-size:12px;white-space:pre-wrap;word-break:break-all;">${escapedMd}</pre>
-                                    </div>
-                                """
-                            }
                         }
 
                         def emailBody = """
@@ -346,7 +327,7 @@ find ./${buildsDir} -type f
                             body: emailBody,
                             to: "${params.RECIPIENTS}",
                             mimeType: 'text/html',
-                            attachmentsPattern: "builds/${BUILD_NUMBER}/**"
+                            attachmentsPattern: "results/**/output_logs.tar.gz,results/**/validation_report.md"
                         )
                     }
                 }
@@ -365,8 +346,8 @@ ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} << 'ENDSSH'
 docker rm -f ${containerName} 2>/dev/null || true
 echo "容器 ${containerName} 已删除"
 
-echo "=== 清理宿主机备份结果 ==="
-rm -rf ${params.WORK_DIR}/results_backup/${BUILD_NUMBER} 2>/dev/null || true
+echo "=== 清理旧的 results_backup 目录 ==="
+rm -rf ${params.WORK_DIR}/results_backup 2>/dev/null || true
 
 echo "清理完成"
 ENDSSH
@@ -380,7 +361,7 @@ ENDSSH
     post {
         always {
             script {
-                archiveArtifacts artifacts: "builds/${BUILD_NUMBER}/**", allowEmptyArchive: true, fingerprint: true
+                archiveArtifacts artifacts: "results/**", allowEmptyArchive: true, fingerprint: true
                 println("构建完成: ${currentBuild.currentResult}")
             }
         }

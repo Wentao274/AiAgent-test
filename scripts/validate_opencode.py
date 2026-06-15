@@ -338,7 +338,7 @@ def main():
     parser.add_argument(
         "--model",
         required=True,
-        help="Model name in provider/model format (e.g., openai/kimi-k2.5)",
+        help="Model name in provider/model format (e.g., custom-openai/kimi-k2.5)",
     )
     parser.add_argument(
         "--config-path",
@@ -359,7 +359,7 @@ def main():
     parser.add_argument(
         "--output-dir",
         default="./results",
-        help="Output directory for results",
+        help="Base output directory for results",
     )
     parser.add_argument(
         "--base-url",
@@ -370,9 +370,24 @@ def main():
     parser.add_argument("--chip", default="", help="Chip platform (for report)")
     parser.add_argument("--pd", default="", help="PD mode (for report)")
     parser.add_argument("--tester", default="", help="Tester name (for report)")
+    parser.add_argument("--build-number", default="0", help="Jenkins build number")
+    parser.add_argument(
+        "--curdate", default="", help="Timestamp for output directory (YYYYMMDDHHmmss)"
+    )
     args = parser.parse_args()
 
-    os.makedirs(args.output_dir, exist_ok=True)
+    model_name = args.model.split("/")[-1]
+    curdate = args.curdate if args.curdate else datetime.now().strftime("%Y%m%d%H%M%S")
+    output_dir = os.path.join(
+        args.output_dir,
+        args.tester,
+        args.build_number,
+        args.chip,
+        model_name,
+        curdate,
+    )
+    os.makedirs(output_dir, exist_ok=True)
+    print(f"[INFO] Output directory: {output_dir}")
 
     params = {
         "base_url": args.base_url,
@@ -385,6 +400,7 @@ def main():
     results = {
         "timestamp": datetime.now().isoformat(),
         "model": args.model,
+        "output_dir": output_dir,
         "tests": [],
     }
 
@@ -402,9 +418,7 @@ def main():
         results["summary"] = {"total": 0, "passed": 0, "failed": 0, "pass_rate": "N/A"}
         results["preflight_error"] = "opencode config check failed"
         with open(
-            os.path.join(args.output_dir, "validation_results.json"),
-            "w",
-            encoding="utf-8",
+            os.path.join(output_dir, "validation_results.json"), "w", encoding="utf-8"
         ) as f:
             json.dump(results, f, ensure_ascii=False, indent=2)
         return 1
@@ -464,13 +478,11 @@ def main():
             "pass_rate": f"{passed / total * 100:.1f}%",
         }
         with open(
-            os.path.join(args.output_dir, "validation_results.json"),
-            "w",
-            encoding="utf-8",
+            os.path.join(output_dir, "validation_results.json"), "w", encoding="utf-8"
         ) as f:
             json.dump(results, f, ensure_ascii=False, indent=2)
         with open(
-            os.path.join(args.output_dir, "smoke_output.txt"), "w", encoding="utf-8"
+            os.path.join(output_dir, "smoke_output.txt"), "w", encoding="utf-8"
         ) as f:
             f.write(
                 f"=== STDOUT ===\n{stdout}\n\n=== STDERR ===\n{stderr}\n\n=== RETURN CODE ===\n{returncode}"
@@ -514,7 +526,7 @@ def main():
             print(f"  - {issue}")
 
     with open(
-        os.path.join(args.output_dir, "weather_output.txt"), "w", encoding="utf-8"
+        os.path.join(output_dir, "weather_output.txt"), "w", encoding="utf-8"
     ) as f:
         f.write(
             f"=== STDOUT ===\n{stdout}\n\n=== STDERR ===\n{stderr}\n\n=== RETURN CODE ===\n{returncode}"
@@ -555,7 +567,7 @@ def main():
             print(f"  - {issue}")
 
     with open(
-        os.path.join(args.output_dir, "list_set_output.txt"), "w", encoding="utf-8"
+        os.path.join(output_dir, "list_set_output.txt"), "w", encoding="utf-8"
     ) as f:
         f.write(
             f"=== STDOUT ===\n{stdout}\n\n=== STDERR ===\n{stderr}\n\n=== RETURN CODE ===\n{returncode}"
@@ -577,12 +589,12 @@ def main():
     print(f"Summary: {passed}/{total} tests passed ({results['summary']['pass_rate']})")
     print("=" * 60)
 
-    results_file = os.path.join(args.output_dir, "validation_results.json")
+    results_file = os.path.join(output_dir, "validation_results.json")
     with open(results_file, "w", encoding="utf-8") as f:
         json.dump(results, f, ensure_ascii=False, indent=2)
     print(f"[INFO] Results saved to: {results_file}")
 
-    report_file = generate_markdown_report(results, args.output_dir, params)
+    report_file = generate_markdown_report(results, output_dir, params)
 
     return 0 if passed == total else 1
 
