@@ -508,6 +508,87 @@ def generate_markdown_report(results, output_dir, params):
     return report_file
 
 
+def generate_html_report(results, output_dir, params):
+    """Generate HTML report for email embedding."""
+    summary = results["summary"]
+    status_icon = "PASSED" if summary["failed"] == 0 else "FAILED"
+    status_color = "#4CAF50" if summary["failed"] == 0 else "#f44336"
+
+    html = '<div style="font-family:Arial,sans-serif;">\n'
+
+    html += "<h2>OpenCode CLI Validation Report</h2>\n"
+    html += f"<p><strong>Timestamp:</strong> {results['timestamp']}<br/>\n"
+    html += f"<strong>Model:</strong> {results['model']}<br/>\n"
+    html += f"<strong>Base URL:</strong> {params.get('base_url', 'N/A')}<br/>\n"
+    html += f"<strong>Infra:</strong> {params.get('infra', 'N/A')}<br/>\n"
+    html += f"<strong>Chip:</strong> {params.get('chip', 'N/A')}<br/>\n"
+    html += f"<strong>PD Mode:</strong> {params.get('pd', 'N/A')}<br/>\n"
+    html += f'<strong>Overall Status:</strong> <span style="color:{status_color};font-weight:bold;">{status_icon}</span></p>\n'
+
+    html += "<h2>Summary</h2>\n"
+    html += '<table style="border-collapse:collapse;width:50%;">\n'
+    html += '<tr style="background:#f2f2f2;"><th style="border:1px solid #ddd;padding:8px;text-align:left;">Metric</th><th style="border:1px solid #ddd;padding:8px;text-align:left;">Value</th></tr>\n'
+    html += f'<tr><td style="border:1px solid #ddd;padding:8px;">Total Tests</td><td style="border:1px solid #ddd;padding:8px;">{summary["total"]}</td></tr>\n'
+    html += f'<tr><td style="border:1px solid #ddd;padding:8px;">Passed</td><td style="border:1px solid #ddd;padding:8px;">{summary["passed"]}</td></tr>\n'
+    html += f'<tr><td style="border:1px solid #ddd;padding:8px;">Failed</td><td style="border:1px solid #ddd;padding:8px;">{summary["failed"]}</td></tr>\n'
+    html += f'<tr><td style="border:1px solid #ddd;padding:8px;">Pass Rate</td><td style="border:1px solid #ddd;padding:8px;">{summary["pass_rate"]}</td></tr>\n'
+    html += "</table>\n"
+
+    html += "<h2>Test Details</h2>\n"
+    for test in results["tests"]:
+        status = "PASSED" if test["passed"] else "FAILED"
+        color = "#4CAF50" if test["passed"] else "#f44336"
+        html += f'<div style="margin-bottom:20px;border:1px solid #ddd;padding:15px;background:#fafafa;border-radius:5px;">\n'
+        html += f'<h3 style="margin-top:0;color:{color};">{test["test_name"]} - {status}</h3>\n'
+
+        if test.get("issues"):
+            html += "<p><strong>Issues:</strong></p><ul>\n"
+            for issue in test["issues"]:
+                safe_issue = (
+                    issue.replace("&", "&amp;")
+                    .replace("<", "&lt;")
+                    .replace(">", "&gt;")
+                )
+                html += f"<li>{safe_issue}</li>\n"
+            html += "</ul>\n"
+
+        if test.get("details"):
+            html += '<p><strong>Validation Details:</strong></p><table style="border-collapse:collapse;width:100%;">\n'
+            html += '<tr style="background:#f2f2f2;"><th style="border:1px solid #ddd;padding:6px;text-align:left;">Key</th><th style="border:1px solid #ddd;padding:6px;text-align:left;">Value</th></tr>\n'
+            for key, value in test["details"].items():
+                if isinstance(value, list):
+                    value = ", ".join(str(v) for v in value) if value else "none"
+                safe_value = (
+                    str(value)
+                    .replace("&", "&amp;")
+                    .replace("<", "&lt;")
+                    .replace(">", "&gt;")
+                )
+                safe_key = (
+                    key.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                )
+                html += f'<tr><td style="border:1px solid #ddd;padding:6px;">{safe_key}</td><td style="border:1px solid #ddd;padding:6px;">{safe_value}</td></tr>\n'
+            html += "</table>\n"
+
+        safe_preview = (
+            test.get("output_preview", "")
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+        )
+        html += "<p><strong>Output Preview:</strong></p>\n"
+        html += f'<pre style="background:#f4f4f4;border:1px solid #ddd;border-radius:4px;padding:12px;overflow-x:auto;font-family:monospace;font-size:12px;white-space:pre-wrap;word-break:break-all;">{safe_preview}</pre>\n'
+        html += "</div>\n<hr/>\n"
+
+    html += "</div>\n"
+
+    html_file = os.path.join(output_dir, "validation_report.html")
+    with open(html_file, "w", encoding="utf-8") as f:
+        f.write(html)
+    print(f"[INFO] HTML report saved to: {html_file}")
+    return html_file
+
+
 def main():
     parser = argparse.ArgumentParser(description="OpenCode CLI Validation Script")
     parser.add_argument(
@@ -858,6 +939,7 @@ def main():
     print(f"[INFO] Results saved to: {results_file}")
 
     report_file = generate_markdown_report(results, output_dir, params)
+    html_file = generate_html_report(results, output_dir, params)
 
     return 0 if passed == total else 1
 
