@@ -212,6 +212,18 @@ def validate_weather_output(output):
     if not has_beijing:
         issues.append("Output does not mention Beijing (北京/Beijing)")
 
+    time_pattern = re.compile(
+        r"\d{1,2}[:：]\d{2}[:：]?\d{0,2}"
+        r"|\d{4}[-/年]\d{1,2}[-/月]\d{1,2}[日]?"
+        r"|北京时间|UTC|CST|GMT"
+    )
+    has_time = bool(time_pattern.search(output))
+    details["has_time_info"] = has_time
+    if not has_time:
+        issues.append(
+            "Output does not contain time information (expected Beijing time)"
+        )
+
     temperature_pattern = re.compile(
         r"-?\d{1,3}\s*[°℃C]\s*[FC]?"
         r"|"
@@ -1005,7 +1017,7 @@ def main():
     print("Test 1: Tool Calling - Getting Beijing Current Weather")
     print("=" * 60)
 
-    weather_prompt = "请获取北京市当前的天气情况，告诉我现在的温度和天气状况。请使用工具来获取实时天气信息。"
+    weather_prompt = "请按北京时间输出当前时间，并获取北京市当前的天气情况，告诉我现在的温度和天气状况。请使用工具来获取实时天气信息。"
     stdout, stderr, returncode = run_opencode(
         weather_prompt,
         args.model,
