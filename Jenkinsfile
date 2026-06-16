@@ -6,7 +6,6 @@ pipeline {
         string(name: 'CHIP', defaultValue: 'nvidia-h100', description: '芯片平台名称')
         choice(name: 'PD', choices: ['agg', 'disagg'], description: 'PD分离模式,agg 表示非 PD 分离, disagg 表示 PD 分离')
         string(name: 'MODEL', defaultValue: 'kimi-k2.5', description: '模型名称（served-model-name）')
-        string(name: 'MODEL_PATH', defaultValue: '/dingofs/data1/userdata/llms/moonshotai/Kimi-K2.6', description: '模型文件本地路径')
         string(name: 'BASE_URL', defaultValue: 'http://10.201.149.10:8080', description: 'API 地址，注意没有/v1后缀')
         password(name: 'API_KEY', defaultValue: 'EMPTY', description: 'API认证密钥，无需认证时保持默认EMPTY')
         text(name: 'RECIPIENTS', defaultValue: 'liwt@zetyun.com', description: '邮件接收者（逗号分隔）')
@@ -38,7 +37,6 @@ echo "推理框架: ${params.INFRA}"
 echo "芯片类型: ${params.CHIP}"
 echo "PD分离模式: ${params.PD}"
 echo "模型服务名称: ${params.MODEL}"
-echo "模型路径: ${params.MODEL_PATH}"
 echo "BASE_URL: ${params.BASE_URL}"
 echo "BUILD_NUMBER: ${BUILD_NUMBER}"
 
@@ -305,7 +303,6 @@ find results -type f
         <tr><td>芯片平台</td><td>${params.CHIP}</td></tr>
         <tr><td>PD分离模式</td><td>${params.PD}</td></tr>
         <tr><td>模型名称</td><td>${params.MODEL}</td></tr>
-        <tr><td>模型路径</td><td>${params.MODEL_PATH}</td></tr>
         <tr><td>API 地址</td><td>${params.BASE_URL}</td></tr>
         <tr><td>OpenCode 镜像</td><td>${OPENCODE_IMAGE}</td></tr>
         <tr><td>测试人员</td><td>${params.TESTER}</td></tr>
