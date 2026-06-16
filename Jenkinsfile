@@ -16,7 +16,7 @@ pipeline {
         SSH_CREDENTIALS = 'HOST_SSH_KEY'
         REMOTE_HOST = '10.201.132.50'
         REMOTE_USER = 'root'
-        OPENCODE_IMAGE = 'ghcr.io/anomalyco/opencode:1.17.0'
+        OPENCODE_IMAGE = 'my-opencode-with-python:latest'
     }
 
     stages {
