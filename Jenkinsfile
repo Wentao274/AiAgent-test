@@ -111,11 +111,14 @@ docker run -d --name ${containerName} \
     --network host \
     --entrypoint sh \
     -v ${params.WORK_DIR}:/workspace/AiAgent-test \
+    -v /etc/localtime:/etc/localtime:ro \
+    -v /etc/timezone:/etc/timezone:ro \
     -e OPENCODE_CONFIG=/workspace/AiAgent-test/config/opencode.json \
     -e BASE_URL=${params.BASE_URL} \
     -e API_KEY=${params.API_KEY} \
     -e LANG=en_US.UTF-8 \
     -e LC_ALL=en_US.UTF-8 \
+    -e TZ=Asia/Shanghai \
     -w /workspace/AiAgent-test \
     ${OPENCODE_IMAGE} \
     -c "sleep infinity"
@@ -196,7 +199,7 @@ docker exec ${containerName} sh -c \\
 echo "=== 验证脚本执行完成 ==="
 
 echo "=== 查看结果目录结构 ==="
-docker exec ${containerName} find /workspace/AiAgent-test/results -type f || echo "Results directory not found"
+docker exec ${containerName} find /workspace/AiAgent-test/results/${params.TESTER}/${BUILD_NUMBER} -type f || echo "Results directory not found"
 
 ENDSSH
 """

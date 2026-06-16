@@ -542,9 +542,8 @@ def validate_boiling_point_output(output):
     details = {}
 
     has_correct_answer = (
-        bool(re.search(r"100\s*[°℃度]", output))
+        bool(re.search(r"100\s*(?:°|℃|度|摄氏度|华氏度|\*{0,2}摄氏)", output))
         or "一百度" in output
-        or "100摄氏度" in output
     )
     details["correct_boiling_point"] = has_correct_answer
     if not has_correct_answer:
