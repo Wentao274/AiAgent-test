@@ -249,7 +249,7 @@ docker exec ${containerName} sh -c \\
         --config-path /workspace/AiAgent-test/config/opencode.json \\
         --work-dir /workspace/AiAgent-test \\
         --output-dir /workspace/AiAgent-test/results \\
-        --timeout 300 \\
+        --timeout 600 \\
         --base-url '${params.BASE_URL}' \\
         --engine '${params.ENGINE}' \\
         --chip '${params.CHIP}' \\

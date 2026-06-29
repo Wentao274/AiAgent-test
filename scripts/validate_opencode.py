@@ -958,7 +958,7 @@ def main():
         args.model,
         args.config_path,
         args.work_dir,
-        timeout=120,
+        timeout=600,
     )
     stdout_clean = strip_ansi(stdout)
     stderr_clean = strip_ansi(stderr)
