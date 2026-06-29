@@ -716,7 +716,7 @@ def generate_markdown_report(results, output_dir, params):
 **Timestamp:** {results["timestamp"]}
 **Model:** {results["model"]}
 **Base URL:** {params.get("base_url", "N/A")}
-**Infra:** {params.get("infra", "N/A")}
+**Engine:** {params.get("engine", "N/A")}
 **Chip:** {params.get("chip", "N/A")}
 **PD Mode:** {params.get("pd", "N/A")}
 **Overall Status:** {status_icon}
@@ -771,7 +771,7 @@ def generate_html_report(results, output_dir, params):
     html += f"<p><strong>Timestamp:</strong> {results['timestamp']}<br/>\n"
     html += f"<strong>Model:</strong> {results['model']}<br/>\n"
     html += f"<strong>Base URL:</strong> {params.get('base_url', 'N/A')}<br/>\n"
-    html += f"<strong>Infra:</strong> {params.get('infra', 'N/A')}<br/>\n"
+    html += f"<strong>Engine:</strong> {params.get('engine', 'N/A')}<br/>\n"
     html += f"<strong>Chip:</strong> {params.get('chip', 'N/A')}<br/>\n"
     html += f"<strong>PD Mode:</strong> {params.get('pd', 'N/A')}<br/>\n"
     html += f'<strong>Overall Status:</strong> <span style="color:{status_color};font-weight:bold;">{status_icon}</span></p>\n'
@@ -883,7 +883,7 @@ def main():
         default="",
         help="Base URL of LLM API",
     )
-    parser.add_argument("--infra", default="", help="Inference framework (for report)")
+    parser.add_argument("--engine", default="", help="Inference framework (for report)")
     parser.add_argument("--chip", default="", help="Chip platform (for report)")
     parser.add_argument("--pd", default="", help="PD mode (for report)")
     parser.add_argument("--tester", default="", help="Tester name (for report)")
@@ -908,7 +908,7 @@ def main():
 
     params = {
         "base_url": args.base_url,
-        "infra": args.infra,
+        "engine": args.engine,
         "chip": args.chip,
         "pd": args.pd,
         "tester": args.tester,
