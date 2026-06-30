@@ -19,6 +19,26 @@ pipeline {
     }
 
     stages {
+        stage('打印测试参数') {
+            steps {
+                script {
+                    println("========================================")
+                    println("=== 测试参数信息 ===")
+                    println("========================================")
+                    println("测试人员:     ${params.TESTER}")
+                    println("芯片类型:     ${params.CHIP}")
+                    println("推理框架:     ${params.ENGINE}")
+                    println("PD分离模式:   ${params.PD}")
+                    println("模型服务名称: ${params.MODEL}")
+                    println("BASE_URL:     ${params.BASE_URL}")
+                    println("邮件接收者:   ${params.RECIPIENTS}")
+                    println("工作目录:     ${params.WORK_DIR}")
+                    println("构建编号:     #${BUILD_NUMBER}")
+                    println("========================================")
+                }
+            }
+        }
+
         stage('API 连通性预检') {
             steps {
                 sshagent(credentials: ["${SSH_CREDENTIALS}"]) {
@@ -88,15 +108,6 @@ echo "=== 工作目录 ==="
 cd ${params.WORK_DIR}
 pwd
 ls -la
-
-echo "=== 测试参数信息 ==="
-echo "测试人员: ${params.TESTER}"
-echo "推理框架: ${params.ENGINE}"
-echo "芯片类型: ${params.CHIP}"
-echo "PD分离模式: ${params.PD}"
-echo "模型服务名称: ${params.MODEL}"
-echo "BASE_URL: ${params.BASE_URL}"
-echo "BUILD_NUMBER: ${BUILD_NUMBER}"
 
 echo "=== Docker 检查 ==="
 docker --version
