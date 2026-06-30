@@ -9,7 +9,7 @@ pipeline {
         string(name: 'BASE_URL', defaultValue: 'http://10.201.149.10:8080', description: 'API 地址（必填）')
         password(name: 'API_KEY', defaultValue: 'EMPTY', description: 'API Key (可选，无需认证时留空)')
         text(name: 'RECIPIENTS', defaultValue: 'liwt@zetyun.com', description: '测试报告邮件接收者（逗号分隔）')
-        string(name: 'WORK_DIR', defaultValue: '/dingofs/data1/userdata/liwt/maas-image/AiAgent-test', description: '测试仓库目录，请不要改动')
+        string(name: 'WORK_DIR', defaultValue: '/dingofs/data2/userdata/liwt/maas-image/AiAgent-test', description: '测试仓库目录，请不要改动')
     }
     environment {
         SSH_CREDENTIALS = 'HOST_SSH_KEY'
