@@ -3,7 +3,7 @@ pipeline {
     parameters {
         string(name: 'TESTER', defaultValue: 'liwt', description: '测试人员名称（必填）')
         string(name: 'CHIP', defaultValue: 'nvidia-h100', description: '芯片平台名称（必填）')
-        choice(name: 'ENGINE', choices: ['vllm', 'sglang', 'dynamo'], description: '推理框架（必填）')
+        choice(name: 'ENGINE', choices: ['vllm', 'sglang'], description: '推理框架（必填）')
         choice(name: 'PD', choices: ['agg', 'disagg'], description: 'PD分离模式（agg表示非PD分离，disagg表示PD分离）')
         string(name: 'MODEL', defaultValue: 'kimi-k2.5', description: '模型服务名称 (必填)')
         string(name: 'BASE_URL', defaultValue: 'http://10.201.149.10:8080', description: 'API 地址（必填）')
