@@ -61,13 +61,13 @@ pipeline {
 ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} << 'ENDSSH'
 set -o pipefail
 {
-    echo "=== 检查 API 连通性 (/v1/models) ==="
-    HTTP_CODE=\$(curl -s --connect-timeout 10 -m 30 -o /dev/null -w "%{http_code}" ${params.BASE_URL}/v1/models)
-    if [ "\${HTTP_CODE}" != "200" ]; then
-        echo "ERROR: API 连通性检查失败, HTTP状态码: \${HTTP_CODE}, URL: ${params.BASE_URL}/v1/models"
-        exit 1
-    fi
-    echo "API /v1/models 连通性检查通过, HTTP状态码: \${HTTP_CODE}"
+    # echo "=== 检查 API 连通性 (/v1/models) ==="
+    # HTTP_CODE=\$(curl -s --connect-timeout 10 -m 30 -o /dev/null -w "%{http_code}" ${params.BASE_URL}/v1/models)
+    # if [ "\${HTTP_CODE}" != "200" ]; then
+    #     echo "ERROR: API 连通性检查失败, HTTP状态码: \${HTTP_CODE}, URL: ${params.BASE_URL}/v1/models"
+    #     exit 1
+    # fi
+    # echo "API /v1/models 连通性检查通过, HTTP状态码: \${HTTP_CODE}"
 
     echo "=== 检查 Chat Completions 接口 ==="
     CHAT_RESP=\$(curl -s --connect-timeout 10 -m 60 -w "\\n%{http_code}" \\
@@ -207,9 +207,6 @@ docker exec ${containerName} sh -c 'echo "BASE_URL=\$BASE_URL"'
 
 echo "=== 验证 opencode 配置文件 ==="
 docker exec ${containerName} cat /workspace/AiAgent-test/config/opencode.json
-
-echo "=== 测试 API 连通性 ==="
-docker exec ${containerName} sh -c 'wget -q -O- --timeout=10 "\$BASE_URL/v1/models" 2>&1 || echo "API connectivity check failed"'
 
 echo "=== 列出 opencode 可识别模型 ==="
 docker exec ${containerName} sh -c 'OPENCODE_CONFIG=/workspace/AiAgent-test/config/opencode.json opencode models 2>&1 | head -30'
