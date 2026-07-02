@@ -4,6 +4,11 @@
 Validates:
 1. Tool calling: Get Beijing current weather
 2. Knowledge: List vs Set differences in Python (no garbled/nonsense text)
+3. Multi-turn dialogue / context memory
+4. Tool calling: AI computing news search
+5. Knowledge: Boiling point of water
+6. Structured output: sales data monthly table template
+7. Translation: Chinese <-> English mutual translation
 """
 
 import argparse
@@ -706,6 +711,116 @@ def validate_sales_table_output(output):
     }
 
 
+def validate_translation_output(output):
+    """Validate Chinese-English mutual translation output.
+
+    Prompt asks the model to:
+    1. Translate a Chinese sentence to English
+    2. Translate an English sentence to Chinese
+
+    Checks:
+    - Contains key English words from the Chinese->English translation
+      ("人工智能"->"artificial intelligence", "改变/改变着"->"changing",
+       "生活"->"life/lives/lifestyle")
+    - Contains Chinese translation of the English sentence
+      ("Knowledge is power." -> "知识就是力量" / "知识就是力量。")
+    - Contains translation structure indicators (中文/英文/English/翻译/translation)
+    - No garbled text
+    - Output is reasonably long
+    """
+    issues = []
+    details = {}
+
+    garbled_pattern = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+    garbled_matches = garbled_pattern.findall(output)
+    details["garbled_chars_count"] = len(garbled_matches)
+    if garbled_matches:
+        issues.append(
+            f"Output contains {len(garbled_matches)} garbled/control characters"
+        )
+
+    en_keywords = [
+        "artificial intelligence",
+        "AI",
+        "changing",
+        "change",
+        "lifestyle",
+        "way of life",
+        "our lives",
+        "life",
+    ]
+    found_en = [kw for kw in en_keywords if kw.lower() in output.lower()]
+    details["found_en_translation_keywords"] = found_en
+    if len(found_en) < 2:
+        issues.append(
+            f"Chinese->English translation lacks expected English keywords "
+            f"(found {len(found_en)}: {found_en})"
+        )
+
+    zh_keywords = [
+        "知识",
+        "力量",
+        "知识就是力量",
+    ]
+    found_zh = [kw for kw in zh_keywords if kw in output]
+    details["found_zh_translation_keywords"] = found_zh
+    if len(found_zh) < 2:
+        issues.append(
+            f"English->Chinese translation lacks expected Chinese keywords "
+            f"(found {len(found_zh)}: {found_zh})"
+        )
+
+    structure_indicators = [
+        "翻译",
+        "译文",
+        "中文",
+        "英文",
+        "Chinese",
+        "English",
+        "translation",
+        "translate",
+        "译",
+    ]
+    found_struct = [kw for kw in structure_indicators if kw in output]
+    details["translation_structure_indicators"] = found_struct
+    if len(found_struct) < 2:
+        issues.append(
+            f"Output lacks translation structure indicators (found "
+            f"{len(found_struct)}: {found_struct})"
+        )
+
+    has_source_zh = "人工智能" in output and "生活" in output
+    details["contains_chinese_source"] = has_source_zh
+    if not has_source_zh:
+        issues.append("Output does not reference the Chinese source sentence")
+
+    has_source_en = "Knowledge" in output and "power" in output.lower()
+    details["contains_english_source"] = has_source_en
+    if not has_source_en:
+        issues.append("Output does not reference the English source sentence")
+
+    if len(output.strip()) < 50:
+        issues.append("Output is too short, possibly incomplete")
+
+    words = output.split()
+    if len(words) > 10:
+        unique_ratio = len(set(words)) / len(words)
+        details["unique_word_ratio"] = round(unique_ratio, 3)
+        if unique_ratio < 0.3:
+            issues.append(
+                f"Output has excessive repetition (unique ratio: "
+                f"{unique_ratio:.2f}), possibly nonsensical"
+            )
+
+    return {
+        "test_name": "Translation - Chinese<->English Mutual",
+        "passed": len(issues) == 0,
+        "issues": issues,
+        "details": details,
+        "output_preview": output[:3000] if output else "",
+    }
+
+
 def generate_markdown_report(results, output_dir, params):
     """Generate markdown report."""
     summary = results["summary"]
@@ -1262,6 +1377,55 @@ def main():
 
     with open(
         os.path.join(output_dir, "sales_table_output.txt"), "w", encoding="utf-8"
+    ) as f:
+        f.write(
+            f"=== STDOUT ===\n{stdout}\n\n=== STDERR ===\n{stderr}\n\n=== RETURN CODE ===\n{returncode}"
+        )
+
+    # ============================================================
+    # Test 7: Translation - Chinese <-> English Mutual Translation
+    # ============================================================
+    print("\n" + "=" * 60)
+    print("Test 7: Translation - Chinese <-> English Mutual Translation")
+    print("=" * 60)
+
+    translation_prompt = (
+        "请你完成两个翻译任务:\n"
+        "任务一:请将下面这句中文翻译成英文:\n"
+        "  原文:人工智能正在改变着我们的生活方式。\n"
+        "任务二:请将下面这句英文翻译成中文:\n"
+        "  Original: Knowledge is power.\n"
+        "请分别清晰地输出两个任务的翻译结果。"
+    )
+    stdout, stderr, returncode = run_opencode(
+        translation_prompt,
+        args.model,
+        args.config_path,
+        args.work_dir,
+        args.timeout,
+    )
+
+    stdout_clean = strip_ansi(stdout)
+    stderr_clean = strip_ansi(stderr)
+    combined_output = stdout_clean
+    if stderr_clean.strip():
+        print(f"[WARN] stderr: {stderr_clean[:500]}")
+        combined_output += "\n" + stderr_clean
+
+    translation_result = validate_translation_output(combined_output)
+    translation_result["returncode"] = returncode
+    translation_result["stderr_preview"] = stderr_clean[:500] if stderr_clean else ""
+    results["tests"].append(translation_result)
+    translation_result["prompt"] = translation_prompt
+
+    status = "PASSED" if translation_result["passed"] else "FAILED"
+    print(f"Result: {status}")
+    if translation_result["issues"]:
+        for issue in translation_result["issues"]:
+            print(f"  - {issue}")
+
+    with open(
+        os.path.join(output_dir, "translation_output.txt"), "w", encoding="utf-8"
     ) as f:
         f.write(
             f"=== STDOUT ===\n{stdout}\n\n=== STDERR ===\n{stderr}\n\n=== RETURN CODE ===\n{returncode}"

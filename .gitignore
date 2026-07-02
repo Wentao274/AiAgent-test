@@ -222,3 +222,52 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Windows reserved device names (accidentally created by misdirected shell redirects
+# like `> nul` / `2>nul` in CMD/PowerShell; these reserved names cannot be created
+# as normal files in Windows but may appear in Git Bash / Cygwin environments).
+# Reference: https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file
+nul
+NUL
+CON
+con
+PRN
+prn
+AUX
+aux
+COM1
+com1
+COM2
+com2
+COM3
+com3
+COM4
+com4
+COM5
+com5
+COM6
+com6
+COM7
+com7
+COM8
+com8
+COM9
+com9
+LPT1
+lpt1
+LPT2
+lpt2
+LPT3
+lpt3
+LPT4
+lpt4
+LPT5
+lpt5
+LPT6
+lpt6
+LPT7
+lpt7
+LPT8
+lpt8
+LPT9
+lpt9
