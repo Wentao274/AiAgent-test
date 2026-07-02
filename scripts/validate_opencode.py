@@ -775,10 +775,16 @@ def validate_translation_output(output):
         "译文",
         "中文",
         "英文",
+        "中译英",
+        "英译中",
+        "任务一",
+        "任务二",
         "Chinese",
         "English",
         "translation",
         "translate",
+        "Task 1",
+        "Task 2",
         "译",
     ]
     found_struct = [kw for kw in structure_indicators if kw in output]
@@ -789,15 +795,21 @@ def validate_translation_output(output):
             f"{len(found_struct)}: {found_struct})"
         )
 
-    has_source_zh = "人工智能" in output and "生活" in output
-    details["contains_chinese_source"] = has_source_zh
-    if not has_source_zh:
-        issues.append("Output does not reference the Chinese source sentence")
-
-    has_source_en = "Knowledge" in output and "power" in output.lower()
-    details["contains_english_source"] = has_source_en
-    if not has_source_en:
-        issues.append("Output does not reference the English source sentence")
+    both_tasks_present = (
+        ("知识" in output and ("力量" in output or "power" in output.lower()))
+        and (
+            "artificial intelligence" in output.lower()
+            or "AI" in output.split()
+            or "ai" in output.lower().split()
+        )
+        and ("life" in output.lower() or "lifestyle" in output.lower())
+    )
+    details["both_translations_present"] = both_tasks_present
+    if not both_tasks_present:
+        issues.append(
+            "Output does not contain expected translations for both directions "
+            "(missing ZH->EN keywords or EN->ZH keywords)"
+        )
 
     if len(output.strip()) < 50:
         issues.append("Output is too short, possibly incomplete")
