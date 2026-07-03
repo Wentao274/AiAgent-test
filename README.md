@@ -71,7 +71,9 @@ results/
     ├── ai_news_output.txt
     ├── boiling_point_output.txt
     ├── sales_table_output.txt
-    └── translation_output.txt
+    ├── translation_output.txt
+    ├── json_object_output.txt
+    └── math_output.txt
 ```
 
 ## 脚本参数说明
@@ -103,6 +105,8 @@ results/
 | 5 | Boiling Point of Water | 知识问答 | `100°C` 正确答案 + 温度/沸点关键词 |
 | 6 | Sales Data Table | 结构化输出 | 表格结构 + 月份/销售/汇总列 |
 | 7 | Chinese↔English Translation | 翻译 | 中→英、英→中双向 + 关键术语命中 |
+| 8 | JSON Object | 结构化输出 | 解析出 JSON 对象 + name/age/city 字段齐全且类型正确 |
+| 9 | Math Problem Solving | 数学推理 | 1+1=2 + 二元一次方程组解 x=3,y=2 + 求解过程关键词 |
 
 ## 通过 / 失败判定
 

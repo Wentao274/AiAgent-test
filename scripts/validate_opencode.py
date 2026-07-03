@@ -9,6 +9,8 @@ Validates:
 5. Knowledge: Boiling point of water
 6. Structured output: sales data monthly table template
 7. Translation: Chinese <-> English mutual translation
+8. Structured output: JSON object with name/age/city fields
+9. Math problem solving: arithmetic (1+1) and binary linear system
 """
 
 import argparse
@@ -833,6 +835,264 @@ def validate_translation_output(output):
     }
 
 
+def validate_json_object_output(output):
+    """Validate structured JSON object output.
+
+    Prompt asks the model to return a JSON object containing name, age, and city.
+
+    Checks:
+    - Output contains a parseable JSON object (extracted from code fences or raw)
+    - JSON object has the three required fields (accept both English and Chinese keys)
+    - Field types are correct: name/姓名 is str, age/年龄 is number,
+      city/城市 is str
+    - No garbled text
+    """
+    issues = []
+    details = {}
+
+    garbled_pattern = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+    garbled_matches = garbled_pattern.findall(output)
+    details["garbled_chars_count"] = len(garbled_matches)
+    if garbled_matches:
+        issues.append(
+            f"Output contains {len(garbled_matches)} garbled/control characters"
+        )
+
+    json_obj = None
+    extraction_error = None
+
+    fence_pattern = re.compile(r"```(?:json|JSON)?\s*\n?(.*?)```", re.DOTALL)
+    fence_matches = fence_pattern.findall(output)
+    for candidate in fence_matches:
+        candidate = candidate.strip()
+        if not candidate:
+            continue
+        try:
+            parsed = json.loads(candidate)
+            if isinstance(parsed, dict):
+                json_obj = parsed
+                break
+        except json.JSONDecodeError:
+            continue
+
+    if json_obj is None:
+        brace_pattern = re.compile(r"\{[^{}]*\}", re.DOTALL)
+        for candidate in brace_pattern.findall(output):
+            try:
+                parsed = json.loads(candidate)
+                if isinstance(parsed, dict):
+                    json_obj = parsed
+                    break
+            except json.JSONDecodeError:
+                continue
+
+    if json_obj is None:
+        try:
+            parsed = json.loads(output.strip())
+            if isinstance(parsed, dict):
+                json_obj = parsed
+        except json.JSONDecodeError as e:
+            extraction_error = str(e)
+
+    if json_obj is None:
+        issues.append(
+            f"Output does not contain a parseable JSON object"
+            + (f" (extraction error: {extraction_error})" if extraction_error else "")
+        )
+        details["json_parsed"] = False
+        details["json_object"] = None
+        if len(output.strip()) < 10:
+            issues.append("Output is too short, possibly incomplete")
+        return {
+            "test_name": "Structured Output - JSON Object",
+            "passed": len(issues) == 0,
+            "issues": issues,
+            "details": details,
+            "output_preview": output[:3000] if output else "",
+        }
+
+    details["json_parsed"] = True
+    details["json_object"] = json_obj
+    details["json_keys"] = list(json_obj.keys())
+
+    name_keys = ["name", "姓名"]
+    age_keys = ["age", "年龄"]
+    city_keys = ["city", "城市"]
+
+    def _find_value(keys):
+        for k in keys:
+            if k in json_obj:
+                return k, json_obj[k]
+        return None, None
+
+    name_key, name_val = _find_value(name_keys)
+    age_key, age_val = _find_value(age_keys)
+    city_key, city_val = _find_value(city_keys)
+
+    details["name_field"] = f"{name_key}={name_val!r}" if name_key else "missing"
+    details["age_field"] = f"{age_key}={age_val!r}" if age_key else "missing"
+    details["city_field"] = f"{city_key}={city_val!r}" if city_key else "missing"
+
+    if name_key is None:
+        issues.append("JSON object is missing the name field (name/姓名)")
+    elif not isinstance(name_val, str) or not name_val.strip():
+        issues.append(
+            f"JSON name field ({name_key}) should be a non-empty string, "
+            f"got {type(name_val).__name__}: {name_val!r}"
+        )
+
+    if age_key is None:
+        issues.append("JSON object is missing the age field (age/年龄)")
+    elif isinstance(age_val, bool) or not isinstance(age_val, (int, float)):
+        issues.append(
+            f"JSON age field ({age_key}) should be a number, "
+            f"got {type(age_val).__name__}: {age_val!r}"
+        )
+    elif isinstance(age_val, (int, float)) and (age_val < 0 or age_val > 150):
+        issues.append(
+            f"JSON age field ({age_key}) value {age_val} is out of plausible range"
+        )
+
+    if city_key is None:
+        issues.append("JSON object is missing the city field (city/城市)")
+    elif not isinstance(city_val, str) or not city_val.strip():
+        issues.append(
+            f"JSON city field ({city_key}) should be a non-empty string, "
+            f"got {type(city_val).__name__}: {city_val!r}"
+        )
+
+    return {
+        "test_name": "Structured Output - JSON Object",
+        "passed": len(issues) == 0,
+        "issues": issues,
+        "details": details,
+        "output_preview": output[:3000] if output else "",
+    }
+
+
+def validate_math_output(output):
+    """Validate math problem solving output.
+
+    Prompt asks the model to solve two problems:
+    1. Simple arithmetic: 1 + 1 = ?
+    2. A system of two linear equations in two unknowns:
+       2x + 3y = 12
+       x - y = 1
+       (correct solution: x = 3, y = 2)
+
+    Checks:
+    - First answer contains the correct result "2"
+    - Second answer contains the correct solution x=3, y=2
+    - Contains math-related keywords
+    - Output is structured with step indicators
+    - No garbled text
+    """
+    issues = []
+    details = {}
+
+    garbled_pattern = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+    garbled_matches = garbled_pattern.findall(output)
+    details["garbled_chars_count"] = len(garbled_matches)
+    if garbled_matches:
+        issues.append(
+            f"Output contains {len(garbled_matches)} garbled/control characters"
+        )
+
+    has_answer_2 = bool(
+        re.search(r"1\s*\+\s*1\s*=\s*2\b|等于\s*2|答案是\s*2|结果(为|是)\s*2", output)
+    )
+    details["first_answer_correct_2"] = has_answer_2
+    if not has_answer_2:
+        simple_two = bool(re.search(r"1\s*\+\s*1\s*=\s*2", output))
+        if simple_two:
+            has_answer_2 = True
+            details["first_answer_correct_2"] = True
+    if not has_answer_2:
+        issues.append("First question (1+1) answer does not contain correct result (2)")
+
+    x_solution_patterns = [
+        r"x\s*=\s*3\b",
+        r"x\s*的值?\s*(?:为|是|等于)\s*3\b",
+        r"x\s*[:：]\s*3\b",
+        r"未知数.*?3",
+    ]
+    has_x_3 = any(re.search(p, output) for p in x_solution_patterns)
+    details["has_x_equals_3"] = has_x_3
+    if not has_x_3:
+        issues.append("System solution does not contain x = 3")
+
+    y_solution_patterns = [
+        r"y\s*=\s*2\b",
+        r"y\s*的值?\s*(?:为|是|等于)\s*2\b",
+        r"y\s*[:：]\s*2\b",
+    ]
+    has_y_2 = any(re.search(p, output) for p in y_solution_patterns)
+    details["has_y_equals_2"] = has_y_2
+    if not has_y_2:
+        issues.append("System solution does not contain y = 2")
+
+    math_keywords = [
+        "方程",
+        "方程组",
+        "解",
+        "代入",
+        "消元",
+        "加减",
+        "求解",
+        "计算",
+        "等式",
+        "未知数",
+        "solution",
+        "equation",
+        "substitut",
+        "eliminat",
+        "solve",
+    ]
+    found_math = [kw for kw in math_keywords if kw.lower() in output.lower()]
+    details["found_math_keywords"] = found_math
+    if len(found_math) < 2:
+        issues.append(
+            f"Output lacks math-related keywords (found {len(found_math)}: {found_math})"
+        )
+
+    step_indicators = [
+        "第一",
+        "第二",
+        "1.",
+        "2.",
+        "①",
+        "②",
+        "Step",
+        "step",
+        "题一",
+        "题二",
+        "问题一",
+        "问题二",
+        "Problem 1",
+        "Problem 2",
+        "Question 1",
+        "Question 2",
+    ]
+    found_steps = [kw for kw in step_indicators if kw in output]
+    details["step_indicators"] = found_steps
+    if len(found_steps) < 2:
+        issues.append(
+            f"Output lacks step/problem structure indicators (found "
+            f"{len(found_steps)}: {found_steps})"
+        )
+
+    if len(output.strip()) < 50:
+        issues.append("Output is too short, possibly incomplete")
+
+    return {
+        "test_name": "Math Problem Solving - Arithmetic & Linear System",
+        "passed": len(issues) == 0,
+        "issues": issues,
+        "details": details,
+        "output_preview": output[:3000] if output else "",
+    }
+
+
 def generate_markdown_report(results, output_dir, params):
     """Generate markdown report."""
     summary = results["summary"]
@@ -1439,6 +1699,98 @@ def main():
     with open(
         os.path.join(output_dir, "translation_output.txt"), "w", encoding="utf-8"
     ) as f:
+        f.write(
+            f"=== STDOUT ===\n{stdout}\n\n=== STDERR ===\n{stderr}\n\n=== RETURN CODE ===\n{returncode}"
+        )
+
+    # ============================================================
+    # Test 8: Structured Output - JSON Object
+    # ============================================================
+    print("\n" + "=" * 60)
+    print("Test 8: Structured Output - JSON Object")
+    print("=" * 60)
+
+    json_prompt = (
+        "请返回一个包含姓名(name)、年龄(age)和城市(city)三个字段的JSON对象，"
+        "只输出JSON本身，不要添加其他说明文字。"
+    )
+    stdout, stderr, returncode = run_opencode(
+        json_prompt,
+        args.model,
+        args.config_path,
+        args.work_dir,
+        args.timeout,
+    )
+
+    stdout_clean = strip_ansi(stdout)
+    stderr_clean = strip_ansi(stderr)
+    combined_output = stdout_clean
+    if stderr_clean.strip():
+        print(f"[WARN] stderr: {stderr_clean[:500]}")
+        combined_output += "\n" + stderr_clean
+
+    json_result = validate_json_object_output(combined_output)
+    json_result["returncode"] = returncode
+    json_result["stderr_preview"] = stderr_clean[:500] if stderr_clean else ""
+    results["tests"].append(json_result)
+    json_result["prompt"] = json_prompt
+
+    status = "PASSED" if json_result["passed"] else "FAILED"
+    print(f"Result: {status}")
+    if json_result["issues"]:
+        for issue in json_result["issues"]:
+            print(f"  - {issue}")
+
+    with open(
+        os.path.join(output_dir, "json_object_output.txt"), "w", encoding="utf-8"
+    ) as f:
+        f.write(
+            f"=== STDOUT ===\n{stdout}\n\n=== STDERR ===\n{stderr}\n\n=== RETURN CODE ===\n{returncode}"
+        )
+
+    # ============================================================
+    # Test 9: Math Problem Solving - Arithmetic & Linear System
+    # ============================================================
+    print("\n" + "=" * 60)
+    print("Test 9: Math Problem Solving - Arithmetic & Linear System")
+    print("=" * 60)
+
+    math_prompt = (
+        "请解答以下两道数学题：\n"
+        "第一题：请问 1 + 1 等于几？\n"
+        "第二题：解二元一次方程组：\n"
+        "  2x + 3y = 12\n"
+        "  x - y = 1\n"
+        "请给出每道题的详细解答过程和最终答案。"
+    )
+    stdout, stderr, returncode = run_opencode(
+        math_prompt,
+        args.model,
+        args.config_path,
+        args.work_dir,
+        args.timeout,
+    )
+
+    stdout_clean = strip_ansi(stdout)
+    stderr_clean = strip_ansi(stderr)
+    combined_output = stdout_clean
+    if stderr_clean.strip():
+        print(f"[WARN] stderr: {stderr_clean[:500]}")
+        combined_output += "\n" + stderr_clean
+
+    math_result = validate_math_output(combined_output)
+    math_result["returncode"] = returncode
+    math_result["stderr_preview"] = stderr_clean[:500] if stderr_clean else ""
+    results["tests"].append(math_result)
+    math_result["prompt"] = math_prompt
+
+    status = "PASSED" if math_result["passed"] else "FAILED"
+    print(f"Result: {status}")
+    if math_result["issues"]:
+        for issue in math_result["issues"]:
+            print(f"  - {issue}")
+
+    with open(os.path.join(output_dir, "math_output.txt"), "w", encoding="utf-8") as f:
         f.write(
             f"=== STDOUT ===\n{stdout}\n\n=== STDERR ===\n{stderr}\n\n=== RETURN CODE ===\n{returncode}"
         )
