@@ -8,6 +8,7 @@ pipeline {
         string(name: 'MODEL', defaultValue: 'kimi-k2.5', description: '模型服务名称 (必填)')
         string(name: 'BASE_URL', defaultValue: 'http://10.201.149.10:8080', description: 'API 地址（必填）')
         password(name: 'API_KEY', defaultValue: 'EMPTY', description: 'API Key (可选，无需认证时留空)')
+        string(name: 'DESCRIPTION', defaultValue: '', description: '模型服务的描述信息')
         text(name: 'RECIPIENTS', defaultValue: 'liwt@zetyun.com', description: '测试报告邮件接收者（逗号分隔）')
         string(name: 'WORK_DIR', defaultValue: '/dingofs/data2/userdata/liwt/maas-image/AiAgent-test', description: '测试仓库目录，请不要改动')
     }
@@ -31,6 +32,7 @@ pipeline {
                     println("PD分离模式:   ${params.PD}")
                     println("模型服务名称: ${params.MODEL}")
                     println("BASE_URL:     ${params.BASE_URL}")
+                    println("模型描述:        ${params.DESCRIPTION}")
                     println("邮件接收者:   ${params.RECIPIENTS}")
                     println("工作目录:     ${params.WORK_DIR}")
                     println("构建编号:     #${BUILD_NUMBER}")
@@ -435,6 +437,7 @@ find results reports -type f 2>/dev/null
     <table>
         <tr><th>项目</th><td>值</td></tr>
         <tr><td>构建编号</td><td>#${BUILD_NUMBER}</td></tr>
+        <tr><td>模型服务描述</td><td>${params.DESCRIPTION}</td></tr>
         <tr><td>测试人员</td><td>${params.TESTER}</td></tr>
         <tr><td>芯片平台</td><td>${params.CHIP}</td></tr>
         <tr><td>推理框架</td><td>${params.ENGINE}</td></tr>
