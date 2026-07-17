@@ -548,9 +548,20 @@ def validate_boiling_point_output(output):
     issues = []
     details = {}
 
+    # Accept "100" with an explicit temperature unit, "一百度", or a standalone
+    # "100" token. The prompt already specifies Celsius ("多少摄氏度"), so a
+    # terse bare "100" is an unambiguous and correct answer. To avoid false
+    # positives where "100" appears in unrelated context (e.g. "海拔100米处
+    # 沸点为90度"), do NOT accept a stray 100 when the model has explicitly
+    # stated a *different* temperature (a number + temp unit that isn't 100).
+    temp_unit_re = r"(?:°|℃|度|摄氏度|华氏度|摄氏)"
+    stated_temps = re.findall(r"(\d+(?:\.\d+)?)\s*" + temp_unit_re, output)
+    explicit_wrong_temp = any(abs(float(n) - 100) > 1e-9 for n in stated_temps)
+    has_100_token = bool(re.search(r"(?<![\d.])100(?![\d.])", output))
     has_correct_answer = (
-        bool(re.search(r"100\s*(?:°|℃|度|摄氏度|华氏度|\*{0,2}摄氏)", output))
+        bool(re.search(r"100\s*" + temp_unit_re, output))
         or "一百度" in output
+        or (has_100_token and not explicit_wrong_temp)
     )
     details["correct_boiling_point"] = has_correct_answer
     if not has_correct_answer:
@@ -569,7 +580,9 @@ def validate_boiling_point_output(output):
     ]
     found_kws = [kw for kw in temp_keywords if kw in output]
     details["found_temperature_keywords"] = found_kws
-    if len(found_kws) < 2:
+    # Require >=2 temperature keywords, unless the correct numeric answer is
+    # already present (the number itself makes the output temperature-relevant).
+    if len(found_kws) < 2 and not has_correct_answer:
         issues.append(
             f"Output lacks temperature-related keywords (found {len(found_kws)}: {found_kws})"
         )
@@ -586,7 +599,9 @@ def validate_boiling_point_output(output):
     found_context = [kw for kw in context_keywords if kw in output]
     details["found_context_keywords"] = found_context
 
-    if len(output.strip()) < 10:
+    # A terse but correct answer (e.g. bare "100") is legitimately short; only
+    # flag shortness when the answer is not already correct.
+    if len(output.strip()) < 10 and not has_correct_answer:
         issues.append("Output is too short, possibly incomplete")
 
     garbled_pattern = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
@@ -746,9 +761,13 @@ def validate_translation_output(output):
         "AI",
         "changing",
         "change",
+        "transform",
         "lifestyle",
         "way of life",
         "our lives",
+        "way we live",
+        "we live",
+        "live",
         "life",
     ]
     found_en = [kw for kw in en_keywords if kw.lower() in output.lower()]
@@ -797,14 +816,36 @@ def validate_translation_output(output):
             f"{len(found_struct)}: {found_struct})"
         )
 
+    output_lower = output.lower()
+    # Concept-based gate: ZH->EN must cover (AI) + (change) + (life/way-of-living);
+    # EN->ZH must cover (knowledge) + (power).
+    has_en_ai = (
+        "artificial intelligence" in output_lower
+        or "ai" in output_lower.split()
+        or "AI" in output.split()
+    )
+    has_en_change = any(
+        k in output_lower for k in ["changing", "change", "transform", "shap"]
+    )
+    has_en_life = any(
+        k in output_lower
+        for k in [
+            "life",
+            "lifestyle",
+            "live",
+            "way of life",
+            "way we live",
+            "our lives",
+        ]
+    )
+    has_zh_knowledge = "知识" in output
+    has_zh_power = "力量" in output
     both_tasks_present = (
-        ("知识" in output and ("力量" in output or "power" in output.lower()))
-        and (
-            "artificial intelligence" in output.lower()
-            or "AI" in output.split()
-            or "ai" in output.lower().split()
-        )
-        and ("life" in output.lower() or "lifestyle" in output.lower())
+        has_en_ai
+        and has_en_change
+        and has_en_life
+        and has_zh_knowledge
+        and has_zh_power
     )
     details["both_translations_present"] = both_tasks_present
     if not both_tasks_present:
@@ -998,15 +1039,29 @@ def validate_math_output(output):
             f"Output contains {len(garbled_matches)} garbled/control characters"
         )
 
-    has_answer_2 = bool(
-        re.search(r"1\s*\+\s*1\s*=\s*2\b|等于\s*2|答案是\s*2|结果(为|是)\s*2", output)
+    # Normalize away markdown emphasis/strong, code spans, and common LaTeX
+    # inline delimiters so the answer digit sits directly next to its lead-in
+    # (e.g. "1 + 1 = **2**" -> "1 + 1 = 2", "$\boxed{2}$" -> "2").
+    norm_output = re.sub(r"\\boxed\{|\\text\{|\\mathrm\{|\\mathbf\{", "", output)
+    norm_output = re.sub(r"[*_`~$\\(){}\[\]]", "", norm_output)
+    first_answer_patterns = [
+        # 1 + 1 = 2 (ASCII or full-width operators)
+        r"1\s*[+\uFF0B]\s*1\s*[=\uFF1D]\s*2",
+        # 1 加 1 等于/=/＝/得/为/是 2
+        r"1\s*加\s*1\s*(?:等于|[=\uFF1D]|得|为|是)\s*2",
+        # 等于 / 答案是 / 结果(为|是) [:：]? 2
+        r"等于\s*[:：]?\s*2",
+        r"(?:最终)?答案(?:是为?|为|是|等于)?\s*[:：]?\s*2",
+        r"结果(?:为|是|等于)\s*[:：]?\s*2",
+        # 1 + 1 得/为/是 2
+        r"1\s*[+\uFF0B]\s*1\s*(?:得|为|是)\s*2",
+    ]
+    has_answer_2 = any(
+        re.search(p, text)
+        for text in (output, norm_output)
+        for p in first_answer_patterns
     )
     details["first_answer_correct_2"] = has_answer_2
-    if not has_answer_2:
-        simple_two = bool(re.search(r"1\s*\+\s*1\s*=\s*2", output))
-        if simple_two:
-            has_answer_2 = True
-            details["first_answer_correct_2"] = True
     if not has_answer_2:
         issues.append("First question (1+1) answer does not contain correct result (2)")
 
