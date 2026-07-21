@@ -1674,7 +1674,15 @@ def main():
     print("Test 6: Structured Output - Sales Data Table Template")
     print("=" * 60)
 
-    sales_prompt = "请帮我设计一个销售数据按月份统计的表格模版并输出到控制台"
+    sales_prompt = (
+        "请编写一个临时Python脚本 scripts/sales_table_template.py，"
+        "该脚本的功能是打印一个销售数据按月份统计的表格模版到控制台。"
+        "表格须包含以下列：月份、销售额、同比、环比、合计，"
+        "并给出1月到12月的示例行以及最后一行的合计行。"
+        "请使用Markdown表格语法输出。"
+        "编写完成后请立即运行该脚本（python scripts/sales_table_template.py），"
+        "使表格内容输出到控制台。"
+    )
     stdout, stderr, returncode = run_opencode(
         sales_prompt,
         args.model,
@@ -1708,6 +1716,22 @@ def main():
         f.write(
             f"=== STDOUT ===\n{stdout}\n\n=== STDERR ===\n{stderr}\n\n=== RETURN CODE ===\n{returncode}"
         )
+
+    # Clean up temp Python scripts created by the model in scripts/
+    scripts_dir = os.path.join(args.work_dir, "scripts")
+    if os.path.isdir(scripts_dir):
+        for fname in os.listdir(scripts_dir):
+            if (
+                fname.endswith(".py")
+                and fname != "validate_opencode.py"
+                and "sales" in fname.lower()
+            ):
+                fpath = os.path.join(scripts_dir, fname)
+                try:
+                    os.remove(fpath)
+                    print(f"[INFO] Cleaned up temp script: {fpath}")
+                except Exception:
+                    pass
 
     # ============================================================
     # Test 7: Translation - Chinese <-> English Mutual Translation
