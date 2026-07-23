@@ -1097,6 +1097,9 @@ def validate_math_output(output):
         "计算",
         "等式",
         "未知数",
+        "答案",
+        "得",
+        "等于",
         "solution",
         "equation",
         "substitut",
@@ -1105,7 +1108,13 @@ def validate_math_output(output):
     ]
     found_math = [kw for kw in math_keywords if kw.lower() in output.lower()]
     details["found_math_keywords"] = found_math
-    if len(found_math) < 2:
+
+    import re
+
+    has_math_expr = bool(re.search(r"\d\s*[+\-*/=]\s*\d", output))
+    details["has_math_expression"] = has_math_expr
+
+    if len(found_math) < 2 and not has_math_expr:
         issues.append(
             f"Output lacks math-related keywords (found {len(found_math)}: {found_math})"
         )
